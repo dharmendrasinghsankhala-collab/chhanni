@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>Chhanni</title><link rel="stylesheet" href="panel.css"></head>
+<body>
+<header><svg viewBox="0 0 64 64"><defs><linearGradient id="lg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ffbe5c"/><stop offset="1" stop-color="#e8892a"/></linearGradient></defs><rect x="2" y="2" width="60" height="60" rx="16" fill="#26262b"/><path d="M12 20h40l-9 26a6 6 0 0 1-5.7 4H26.7A6 6 0 0 1 21 46z" fill="url(#lg)"/><g stroke="#1a1206" stroke-width="2.2" stroke-linecap="round" opacity=".75"><path d="M22 28h20M24 34h16M26 40h12"/><path d="M28 22v22M36 22v22"/></g></svg>
+  <div><b>Chhanni</b><span>Footage QC &amp; Selects</span></div><i id="srv" title="Engine"></i></header>
+<section>
+  <label>Chhanni project</label>
+  <div class="row"><select id="proj"></select><button id="ref" class="icon" title="Refresh">⟳</button></div>
+  <div id="info" class="info">Loading…</div>
+  <label>Sequences</label>
+  <select id="grp"><option value="group">One per camera / card</option><option value="folder">One per folder</option><option value="none">One per type (A / B)</option></select>
+  <div class="checks">
+    <label class="ck"><input type="checkbox" id="iA" checked> A-roll (interviews)</label>
+    <label class="ck"><input type="checkbox" id="iB" checked> B-roll</label>
+    <label class="ck"><input type="checkbox" id="sm" checked> High-fps (S&amp;Q) clips slow-motion</label>
+  </div>
+  <button id="go" class="primary">Import into Premiere project</button>
+  <div class="bar"><div id="bar"></div></div>
+  <label>Script / music versions</label>
+  <div class="row"><select id="ver"></select><button id="gov" class="icon" title="Import version">▶</button></div>
+  <label class="ck" style="display:flex;gap:7px;align-items:center;font-weight:400;color:#e6e6ea"><input type="checkbox" id="repl" checked> Purani sequence replace karo</label>
+  <button id="smart" style="width:100%;margin-top:8px">Build smart bins (shot size · ★ Hero · Golden hour · Smooth moves)</button>
+  <div id="status" class="status"></div>
+  <div id="log" class="log"></div>
+  <div class="row foot"><button id="app">Open Chhanni app</button><span class="sp"></span><span id="pp" class="muted"></span></div>
+</section>
+<script src="panel.js"></script>
+</body></html>
