@@ -1,8 +1,8 @@
 {
- "version": "3.4",
- "notes": "Auto-update (GitHub), fixed install folder, Reel / Promo switches, instruction regenerate, timeline replace.",
- "requirements": [
-  "numpy",
-  "opencv-python"
- ]
+  "version": "3.4.1",
+  "notes": "Fix: naye features turant dikhenge (UI cache band).",
+  "requirements": [
+    "numpy",
+    "opencv-python"
+  ]
 }

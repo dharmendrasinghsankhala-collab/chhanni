@@ -274,7 +274,7 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Access-Control-Allow-Origin", "*")
         self.send_header("Access-Control-Allow-Headers", "Content-Type")
-        self.send_header("Cache-Control", "no-store" if ctype.startswith("application/json") else "max-age=3600")
+        self.send_header("Cache-Control", "max-age=3600" if ctype.startswith(("image/", "video/", "audio/")) else "no-store")
         for k, v in (extra or {}).items():
             self.send_header(k, v)
         self.end_headers()
