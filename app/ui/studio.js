@@ -25,13 +25,13 @@ XP.models = async function pageModels() {
         <div class="row">${ok ? "" : `<button class="btn primary sm" data-inst="${c.id}" ${ins.running ? "disabled" : ""}>Install</button>`}
         ${["qc", "motion"].includes(c.id) ? "" : `<button class="btn sm" data-test="${c.id}" ${ok ? "" : "disabled"}>Test</button>`}<span class="small muted" id="tr_${c.id}"></span></div>
         ${c.id === "vlm" ? `<div class="grid g2" style="margin-top:10px"><div class="field"><label>Model (VRAM ke hisaab se)</label><select class="input" id="vlmm">
-            <option value="qwen3-vl:8b">qwen3-vl:8b — best (12 GB GPU)</option><option value="qwen3-vl:4b">qwen3-vl:4b — fast (8 GB GPU)</option><option value="qwen3-vl:2b">qwen3-vl:2b — light (6 GB GPU)</option></select></div>
+            <option value="qwen3-vl:8b-instruct">qwen3-vl 8B — best (12 GB GPU)</option><option value="qwen3-vl:4b-instruct">qwen3-vl 4B — fast (8 GB GPU)</option><option value="qwen3-vl:2b-instruct">qwen3-vl 2B — light (6 GB GPU)</option></select></div>
           <div class="field"><label>Description kab banaye</label><select class="input" id="vlmode"><option value="auto">Auto — har clip ke best shots</option><option value="all">Har shot (slow, sabse detail)</option><option value="off">Off</option></select></div></div>
           <div class="small muted">Pulled: ${h((s.pulled || []).join(", ") || "—")} ${s.ollama ? "" : s.ollama_installed ? "· Ollama band hai (Install dabane se start ho jayega)" : ""}</div>` : ""}</div>`;
     }).join("")}</div>`).join("")}
     <div class="card" style="margin-top:16px"><div class="row"><h3>Install log</h3><span class="sp"></span><span class="small muted" id="ist">${ins.running ? "installing " + h(ins.item || "") + "…" : ins.error ? "❌ " + h(ins.error) : ""}</span></div>
       <div class="console" id="mlog" style="height:220px"></div></div></div>`;
-  const vm = $("#vlmm"); if (vm) { vm.value = set.vlm_model || "qwen3-vl:8b"; vm.onchange = async () => { await api("/api/ai/settings", { vlm_model: vm.value }); XP.models(); }; }
+  const vm = $("#vlmm"); if (vm) { vm.value = set.vlm_model || "qwen3-vl:8b-instruct"; vm.onchange = async () => { await api("/api/ai/settings", { vlm_model: vm.value }); XP.models(); }; }
   const vo = $("#vlmode"); if (vo) { vo.value = set.vlm_mode || "auto"; vo.onchange = () => api("/api/ai/settings", { vlm_mode: vo.value }).then(() => toast("Saved")); }
   const install = async items => { try { await api("/api/models/install", { items }); toast("Install shuru - log neeche"); watch(); } catch (e) { toast(e.message, 1); } };
   $("#mall") && ($("#mall").onclick = () => install(missing));

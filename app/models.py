@@ -17,7 +17,7 @@ APP_DIR = Path(__file__).resolve().parent
 MODEL_DIR = APP_DIR / "models"
 NO_WINDOW = 0x08000000 if os.name == "nt" else 0
 OLLAMA = "http://127.0.0.1:11434"
-VLM_DEFAULT = "qwen3-vl:8b"
+VLM_DEFAULT = "qwen3-vl:8b-instruct"
 
 SFACE_URLS = [
     "https://media.githubusercontent.com/media/opencv/opencv_zoo/main/models/face_recognition_sface/face_recognition_sface_2021dec.onnx",
@@ -267,7 +267,8 @@ def install(item):
             import llm
             s = llm.load_settings()
             upd = {"vlm_model": model, "vlm_mode": s.get("vlm_mode") or "auto"}
-            if s.get("llm_provider") in (None, "", "none"):
+            if s.get("llm_provider") in (None, "", "none") or (s.get("llm_provider") == "ollama" and
+                                                                 s.get("llm_model") in (None, "", "qwen3:8b", "qwen3-vl:8b")):
                 upd.update(llm_provider="ollama", llm_model=model)
             llm.save_settings(upd)
         except Exception:

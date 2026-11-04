@@ -186,7 +186,7 @@ class Models:
             mode = self.cfg.get("vlm_mode", "auto")
             if mode == "off":
                 return None
-            name = self.cfg.get("vlm_model") or "qwen3-vl:8b"
+            name = self.cfg.get("vlm_model") or "qwen3-vl:8b-instruct"
             with urllib.request.urlopen(OLLAMA + "/api/tags", timeout=2) as r:
                 tags = [m.get("name") for m in json.loads(r.read()).get("models", [])]
             if not any(t == name or t.startswith(name) for t in tags):

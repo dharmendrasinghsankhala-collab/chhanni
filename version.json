@@ -1,6 +1,6 @@
 {
-  "version": "4.0.2",
-  "notes": "Fix: CLAP sound analysis, AI Team uses installed Qwen3-VL by default.",
+  "version": "4.0.3",
+  "notes": "Qwen3-VL instruct (fast, no thinking) as default for descriptions and AI Team.",
   "requirements": [
     "numpy",
     "opencv-python"
