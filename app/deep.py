@@ -650,7 +650,12 @@ def analyze_clip(clip, out_dir, M, progress=None):
 def _clips(out_dir):
     import plan
     data, _ = plan.load_project(out_dir)
-    return data.get("clips", [])
+    clips = data.get("clips", [])
+    for c in clips:   # projects from older Chhanni versions have no clip id
+        if not c.get("id"):
+            c["id"] = engine.cache_name(c["path"])[:-4]
+        c.setdefault("name", Path(c["path"]).name)
+    return clips
 
 
 def mark_current_failed(out_dir):

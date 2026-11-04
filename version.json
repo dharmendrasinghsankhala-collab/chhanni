@@ -1,6 +1,6 @@
 {
-  "version": "4.0.3",
-  "notes": "Qwen3-VL instruct (fast, no thinking) as default for descriptions and AI Team.",
+  "version": "4.0.4",
+  "notes": "Fix: deep analysis on projects made with older Chhanni versions.",
   "requirements": [
     "numpy",
     "opencv-python"
