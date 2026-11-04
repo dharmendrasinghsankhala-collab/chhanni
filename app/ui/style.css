@@ -230,3 +230,29 @@ label.fsub{display:block}
 .instr{display:flex;gap:8px;margin:10px 0}
 .instr input{flex:1}
 .vtag{font-size:11px;color:var(--accent2);margin-left:6px}
+
+/* ---------- v4 Studio pages ---------- */
+.btn.sm{padding:5px 10px;font-size:12.5px}
+.input.sm{padding:5px 8px;font-size:12.5px;width:auto}
+.mcard h3{margin:0}
+.facets{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+.libgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:12px;margin-top:14px}
+.lcard{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);overflow:hidden;cursor:pointer;transition:border-color .12s,transform .12s}
+.lcard:hover{border-color:var(--line2);transform:translateY(-1px)}
+.lcard.on{border-color:var(--sel);box-shadow:0 0 0 2px rgba(61,139,253,.35)}
+.lth{aspect-ratio:16/9;background:#0b0d11 center/cover no-repeat;position:relative}
+.ltc,.lbe{position:absolute;bottom:6px;font-size:11px;font-weight:650;padding:1px 6px;border-radius:4px;background:rgba(0,0,0,.65)}
+.ltc{left:6px} .lbe{right:6px;color:var(--star)}
+.lmeta{padding:8px 10px;display:flex;flex-direction:column;gap:4px}
+.lmeta .tags{display:flex;flex-wrap:wrap;gap:4px;position:static}
+.lmeta .tg{background:var(--panel2);border:1px solid var(--line)}
+.ellip{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.clamp2{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.pgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px}
+.pcard{display:flex;flex-direction:column;gap:8px;align-items:stretch}
+.pface{width:100%;aspect-ratio:1;border-radius:10px;background:#0b0d11 no-repeat}
+.hookbox{background:rgba(242,169,59,.08);border:1px solid rgba(242,169,59,.3);border-radius:8px;padding:8px 10px;margin:6px 0}
+.beat{padding:6px 0;border-top:1px solid var(--line);font-size:13px}
+.kfrow{display:flex;gap:6px;margin-top:6px;flex-wrap:wrap}
+.kft{width:96px;aspect-ratio:16/9;border-radius:6px;background:#0b0d11 center/cover no-repeat;border:1px solid var(--line)}
+.vtab{cursor:pointer}

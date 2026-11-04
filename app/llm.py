@@ -67,7 +67,8 @@ def chat(system, user, want_json=True, settings=None, timeout=240):
         base = s.get("base_url") or "http://127.0.0.1:11434"
         body = {"model": model, "stream": False, "messages": [{"role": "system", "content": system},
                                                                {"role": "user", "content": user}],
-                "options": {"temperature": 0.3}}
+                "options": {"temperature": 0.3, "num_ctx": int(s.get("num_ctx") or 16384)}, "think": False,
+                "keep_alive": "15m"}
         if want_json:
             body["format"] = "json"
         r = _post(base.rstrip("/") + "/api/chat", body, {}, timeout)

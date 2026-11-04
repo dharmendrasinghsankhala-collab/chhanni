@@ -137,44 +137,83 @@ def _progress(d):
 
 
 def ai_cfg(out):
-    cfg = engine.load_config(Path(out))
-    st = llm.load_settings()
-    for k in ("whisper_model", "language", "use_clip", "dead_air_sec"):
-        if st.get(k) not in (None, ""):
-            cfg[k] = st[k]
-    return cfg
+    import jobs
+    return jobs.ai_cfg(out)
+
+
+def _python_exe():
+    exe = sys.executable
+    if exe.lower().endswith("pythonw.exe"):
+        cand = exe[:-len("pythonw.exe")] + "python.exe"
+        if os.path.exists(cand):
+            return cand
+    return exe
+
+
+WORKER = {"proc": None}
+
+
+def _run_worker(out, folders, mode):
+    """Runs the job in worker.py; a crash only kills the worker. For 'deep', a crashing clip is skipped and
+    the worker restarted (up to 6 times)."""
+    out = Path(out)
+    stop_file = out / ".stop"
+    restarts = 0
+    while True:
+        try:
+            stop_file.unlink()
+        except Exception:
+            pass
+        cmd = [_python_exe(), "-u", str(APP_DIR / "worker.py"), mode, str(out), json.dumps(folders or [])]
+        env = dict(os.environ, PYTHONIOENCODING="utf-8", PYTHONUNBUFFERED="1")
+        p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, cwd=str(APP_DIR), env=env,
+                             creationflags=NO_WINDOW, text=True, encoding="utf-8", errors="replace", bufsize=1)
+        WORKER["proc"] = p
+        result = None
+        for line in p.stdout:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                o = json.loads(line)
+            except Exception:
+                engine.log(line[:400])
+                continue
+            t = o.get("t")
+            if t == "log":
+                engine.log(o.get("m", ""))
+            elif t == "progress":
+                _progress(o.get("d") or {})
+            elif t in ("done", "error"):
+                result = o
+        rc = p.wait()
+        WORKER["proc"] = None
+        if result and result["t"] == "done":
+            return result.get("phase") or "finished"
+        if stop_file.exists() or engine.STOP.is_set():
+            return "stopped"
+        if result and result["t"] == "error":
+            raise RuntimeError(result.get("m") or "job failed")
+        # hard crash (no final line): skip the clip that was running and continue
+        if mode == "deep" and restarts < 6:
+            restarts += 1
+            try:
+                import deep
+                bad = deep.mark_current_failed(out)
+                engine.log(f"[deep] worker crashed (code {rc}) on {bad or 'unknown clip'} - skipping it and resuming")
+            except Exception as e:
+                engine.log(f"[deep] worker crashed (code {rc}): {e}")
+            continue
+        raise RuntimeError(f"Worker process band ho gaya (code {rc}). Log dekhiye; app chal raha hai.")
 
 
 def run_job(out, folders, mode):
-    out = Path(out)
     try:
-        cfg = ai_cfg(out)
-        if mode == "transcribe":
-            import ai_audio
-            data, review = plan.load_project(out)
-            hot = None
-            sp = out / "script.txt"
-            if sp.exists():
-                hot = " ".join(sp.read_text(encoding="utf-8").split())[:400]
-            ai_audio.transcribe_project(out, data["clips"], engine.FFMPEG, cfg, log=engine.log, progress=_progress,
-                                        stop=engine.STOP, hotwords=hot)
-            if engine.STOP.is_set():
-                with JOB_LOCK:
-                    JOB["phase"] = "stopped"
-                return
-        if mode == "all":
-            roots = [str(p) for p in engine.normalize_roots(folders)]
-            if not roots:
-                raise RuntimeError("Koi valid footage folder nahi mila.")
-            (out / "roots.json").write_text(json.dumps(roots, ensure_ascii=False), encoding="utf-8")
-            ok = engine.cmd_analyze(roots, out, cfg, progress=_progress)
-            if not ok:
-                with JOB_LOCK:
-                    JOB["phase"] = "stopped"
-                return
-        engine.cmd_select(out, cfg, progress=_progress)
+        phase = _run_worker(out, folders, mode)
         with JOB_LOCK:
-            JOB["phase"] = "finished"
+            JOB["phase"] = phase
+            if phase == "finished":
+                JOB["progress"]["phase"] = "finished"
     except Exception as e:
         engine.log(f"[error] {e}")
         with JOB_LOCK:
@@ -184,6 +223,23 @@ def run_job(out, folders, mode):
         with JOB_LOCK:
             JOB["running"] = False
             JOB["finished"] = time.time()
+
+
+def stop_job():
+    out = JOB.get("out")
+    if out:
+        try:
+            (Path(out) / ".stop").write_text("stop", encoding="utf-8")
+        except Exception:
+            pass
+    engine.STOP.set()
+    p = WORKER.get("proc")
+    if p:
+        def _kill_later(pr=p):
+            time.sleep(8)
+            if pr.poll() is None:
+                pr.kill()
+        threading.Thread(target=_kill_later, daemon=True).start()
 
 
 def start_job(out, folders, mode):
@@ -361,6 +417,28 @@ class Handler(BaseHTTPRequestHandler):
             if u.path == "/api/plan":
                 inc = tuple((q.get("include") or "A,B").split(","))
                 return self._send(200, plan.plan_for_host(q["out"], group_by=q.get("group_by", "group"), include=inc))
+            if u.path.startswith("/kf/"):
+                name = os.path.basename(unquote(u.path[len("/kf/"):]))
+                p = Path(q.get("out", "")) / "deep" / "kf" / name
+                if p.exists():
+                    return self._send(200, p.read_bytes(), "image/jpeg")
+                return self._send(404, b"", "text/plain")
+            if u.path == "/api/models":
+                import models
+                return self._send(200, {"catalog": models.CATALOG, "status": models.status(),
+                                        "install": models.install_state(), "settings": llm.public_settings()})
+            if u.path == "/api/deep/status":
+                import deep
+                return self._send(200, deep.status(q["out"]))
+            if u.path == "/api/library/facets":
+                import library
+                return self._send(200, library.facets(q["out"]))
+            if u.path == "/api/people":
+                import people
+                return self._send(200, people.load(q["out"]))
+            if u.path == "/api/crew/saved":
+                import crew
+                return self._send(200, {"data": crew.load_saved(q["out"], q["name"])})
             if u.path.startswith("/thumbs/"):
                 out = q.get("out")
                 name = os.path.basename(unquote(u.path[len("/thumbs/"):]))
@@ -420,7 +498,7 @@ class Handler(BaseHTTPRequestHandler):
                 start_job(out, folders, "all")
                 return self._send(200, {"ok": True})
             if u.path == "/api/stop":
-                engine.request_stop()
+                stop_job()
                 return self._send(200, {"ok": True})
             if u.path == "/api/review":
                 out = b["out"]
@@ -562,6 +640,46 @@ class Handler(BaseHTTPRequestHandler):
                 lines = []
                 r = resolve_bridge.smart_bins(rv, b["out"], log=lambda m: (lines.append(m), engine.log(m)))
                 return self._send(200, {"ok": True, "result": r, "log": lines})
+            if u.path == "/api/models/install":
+                import models
+                models.install_async(b.get("items") or [])
+                return self._send(200, {"ok": True})
+            if u.path == "/api/models/test":
+                import models
+                return self._send(200, models.selftest(b["item"]))
+            if u.path == "/api/deep/start":
+                if b.get("vlm_mode"):
+                    llm.save_settings({"vlm_mode": b["vlm_mode"]})
+                if b.get("retry_failed"):
+                    fp = Path(b["out"]) / "deep" / "_failed.json"
+                    if fp.exists():
+                        fp.unlink()
+                start_job(b["out"], [], "deep")
+                return self._send(200, {"ok": True})
+            if u.path == "/api/people/recluster":
+                start_job(b["out"], [], "people")
+                return self._send(200, {"ok": True})
+            if u.path == "/api/people/rename":
+                import people
+                return self._send(200, people.rename(b["out"], b["id"], b.get("name", "")))
+            if u.path == "/api/library/search":
+                import library
+                return self._send(200, {"results": library.search(b["out"], b.get("q", ""), b.get("filters"),
+                                                                   int(b.get("limit") or 80))})
+            if u.path == "/api/library/stringout":
+                import library
+                v = library.stringout(b["out"], b["picks"], b.get("name") or "Library selects")
+                return self._send(200, {"ok": True, "version": v["id"]})
+            if u.path == "/api/crew/concept":
+                import crew
+                return self._send(200, crew.concept(b["out"], b.get("brief")))
+            if u.path == "/api/crew/review":
+                import crew
+                return self._send(200, crew.review(b["out"], b["version"], b.get("brief"), b.get("roles")))
+            if u.path == "/api/crew/ask":
+                import crew
+                return self._send(200, {"answer": crew.ask(b["out"], b.get("role", "director"), b["q"], b.get("brief"),
+                                                           b.get("version"))})
             if u.path == "/api/reveal":
                 reveal(b["path"])
                 return self._send(200, {"ok": True})
@@ -585,6 +703,34 @@ def server_running():
             return json.loads(r.read()).get("app") == "chhanni"
     except Exception:
         return False
+
+
+def running_info():
+    import urllib.request
+    try:
+        with urllib.request.urlopen(f"http://127.0.0.1:{PORT}/api/state", timeout=2) as r:
+            st = json.loads(r.read())
+            return {"version": st.get("version"), "busy": bool((st.get("job") or {}).get("running"))}
+    except Exception:
+        return None
+
+
+def replace_old_server():
+    """An older Chhanni still running after an update -> ask it to quit (unless it is busy with a job)."""
+    info = running_info()
+    if not info or info.get("version") == VERSION or info.get("busy"):
+        return False
+    import urllib.request
+    try:
+        urllib.request.urlopen(urllib.request.Request(f"http://127.0.0.1:{PORT}/api/quit", data=b"{}",
+                                                      headers={"Content-Type": "application/json"}), timeout=3)
+    except Exception:
+        pass
+    for _ in range(20):
+        time.sleep(0.3)
+        if not server_running():
+            return True
+    return False
 
 
 def serve(block=True):

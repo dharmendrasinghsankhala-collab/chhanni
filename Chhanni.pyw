@@ -46,6 +46,8 @@ def main():
     import server
     server_only = "--server" in sys.argv
     if server.server_running():
+        server.replace_old_server()
+    if server.server_running():
         if not server_only:
             open_window()
         return

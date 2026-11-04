@@ -1,6 +1,6 @@
 {
-  "version": "3.4.1",
-  "notes": "Fix: naye features turant dikhenge (UI cache band).",
+  "version": "4.0",
+  "notes": "Chhanni Studio: Deep analysis (shots, camera, faces, emotion, sound, Qwen3-VL), Library search, People, AI Team (Director/DOP/Editor/Producer/Concept), AI Models manager, crash-proof workers.",
   "requirements": [
     "numpy",
     "opencv-python"

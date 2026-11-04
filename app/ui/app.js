@@ -51,14 +51,14 @@ async function render() {
   S.route = (location.hash.slice(2) || "home").split("/")[0];
   $$("#nav a").forEach(a => {
     a.classList.toggle("on", a.dataset.r === S.route);
-    if (["run", "review", "export", "assemble"].includes(a.dataset.r)) a.classList.toggle("dis", !S.out);
+    if (["run", "review", "export", "assemble", "deep", "library", "people", "crew"].includes(a.dataset.r)) a.classList.toggle("dis", !S.out);
   });
   if (S.out && (!S.project || S.project.out !== S.out)) {
     try { S.project = await api("/api/project?out=" + enc(S.out)); } catch { S.project = null; }
   }
   $("#navproj").textContent = S.project ? S.project.name : "No project open";
   main.scrollTop = 0;
-  const pages = { home: pageHome, new: pageNew, run: pageRun, review: pageReview, export: pageExport, assemble: pageAssemble, ai: pageAI };
+  const pages = Object.assign({ home: pageHome, new: pageNew, run: pageRun, review: pageReview, export: pageExport, assemble: pageAssemble, ai: pageAI }, window.EXTRA_PAGES || {});
   (pages[S.route] || pageHome)();
 }
 
@@ -257,13 +257,13 @@ async function poll() {
     $("#gpuchip").innerHTML = `<i></i>${st.gpu ? h(st.gpu.replace("NVIDIA GeForce ", "")) + (st.cuda ? " · CUDA" : "") : st.cuda ? "NVIDIA CUDA" : "CPU decode"}`;
     $("#ver").textContent = "Chhanni " + st.version;
     const j = st.job;
-    $("#minirun").innerHTML = j.running ? `<div class="mini-run" onclick="go('run','${h(j.out).replace(/\\/g, "\\\\").replace(/'/g, "\\'")}')"><div class="row small"><span class="phase"><span class="dot"></span>${h(j.phase)}</span><span class="sp"></span>${j.progress?.bytes_total ? Math.floor(j.progress.bytes_done / j.progress.bytes_total * 100) + "%" : ""}</div>
+    $("#minirun").innerHTML = j.running ? `<div class="mini-run" onclick="go(['deep','people'].includes('${j.mode}')?'deep':'run','${h(j.out).replace(/\\/g, "\\\\").replace(/'/g, "\\'")}')"><div class="row small"><span class="phase"><span class="dot"></span>${h(j.phase)}</span><span class="sp"></span>${j.progress?.pct != null ? Math.round(j.progress.pct) + "%" : j.progress?.bytes_total ? Math.floor(j.progress.bytes_done / j.progress.bytes_total * 100) + "%" : ""}</div>
       <div class="bar"><div style="width:${j.progress?.bytes_total ? j.progress.bytes_done / j.progress.bytes_total * 100 : 3}%"></div></div></div>` : "";
     if (wasRunning && !j.running) {
       S.project = null; S.results = null;
-      if (j.phase === "finished") toast("Ho gaya! Review screen par selects dekhiye.");
+      if (j.phase === "finished") toast(["deep", "people"].includes(j.mode) ? "Deep analysis ho gaya! Library / People / AI Team dekhiye." : "Ho gaya! Review screen par selects dekhiye.");
       if (j.phase === "error") toast("Error: " + j.error, 1);
-      if (S.route === "run" || S.route === "review") render();
+      if (["run", "review", "deep", "people"].includes(S.route)) render();
     }
     wasRunning = j.running;
     updateRun();
