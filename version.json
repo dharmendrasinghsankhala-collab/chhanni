@@ -1,6 +1,6 @@
 {
-  "version": "4.0.4",
-  "notes": "Fix: deep analysis on projects made with older Chhanni versions.",
+  "version": "4.0.5",
+  "notes": "Deep analysis: TransNetV2 on GPU, sound analysis on older projects, no guessed location tags.",
   "requirements": [
     "numpy",
     "opencv-python"

@@ -142,9 +142,18 @@ class Models:
                 m = TransNetV2(device=dev)
             except TypeError:
                 m = TransNetV2()
-                m = m.to(dev)
+            m = m.to(dev)
+            # the package switches torch to "deterministic" mode (cuDNN off), which breaks 3D conv on CUDA
+            # and slows every other model in this process -> switch it back
+            try:
+                torch.use_deterministic_algorithms(False)
+            except Exception:
+                pass
+            torch.backends.cudnn.enabled = True
+            torch.backends.cudnn.deterministic = False
+            torch.backends.cudnn.benchmark = True
             m.eval()
-            return (m, dev, torch)
+            return [m, dev, torch]
         return self._get("transnet", load)
 
     def face_det(self):
@@ -267,16 +276,27 @@ def detect_shots(small48, fps, M):
         return [(0, max(0, N - 1))]
     tn = M.transnet()
     if tn is not None:
-        try:
-            m, dev, torch = tn
+        def run(m, dev, torch):
             with torch.no_grad():
-                fr = torch.from_numpy(np.ascontiguousarray(small48))
+                fr = torch.from_numpy(np.ascontiguousarray(small48)).to(dev)
                 try:
                     res = m.predict_frames(fr, quiet=True)
                 except TypeError:
                     res = m.predict_frames(fr)
-                single = res[0]
-                single = single.detach().cpu().numpy() if hasattr(single, "detach") else np.asarray(single)
+            single = res[0]
+            return single.detach().cpu().numpy() if hasattr(single, "detach") else np.asarray(single)
+        try:
+            m, dev, torch = tn
+            try:
+                single = run(m, dev, torch)
+            except Exception as e:
+                if dev == "cpu":
+                    raise
+                log(f"[deep] TransNetV2 on GPU failed ({str(e)[:80]}) - using CPU")
+                tn[0] = m = m.to("cpu")
+                tn[1] = dev = "cpu"
+                m.device = torch.device("cpu")
+                single = run(m, dev, torch)
             single = single.reshape(-1)[:N]
             cuts = [i for i in range(1, N) if single[i] > 0.5 and single[i] >= single[max(0, i - 1)]]
             return _cuts_to_shots(cuts, N, int(fps * 0.4))
@@ -530,10 +550,12 @@ def analyze_clip(clip, out_dir, M, progress=None):
         for gname, vocab in LOOK.items():
             T = M.clip_text("look_" + gname, [v for _, v in vocab])
             P = _softmax(E @ T.T)
+            min_p = {"scene": 0.5, "subject": 0.5}.get(gname, 0.3)   # unsure -> leave empty, never guess
             for r, i in enumerate(valid):
                 k = int(P[r].argmax())
-                segs[i][gname] = vocab[k][0]
-                segs[i][gname + "_p"] = round(float(P[r, k]), 2)
+                if float(P[r, k]) >= min_p:
+                    segs[i][gname] = vocab[k][0]
+                    segs[i][gname + "_p"] = round(float(P[r, k]), 2)
         Tp = M.clip_text("aes_pos", AESTHETIC[0])
         Tn = M.clip_text("aes_neg", AESTHETIC[1])
         aes = (E @ Tp.T).mean(1) - (E @ Tn.T).mean(1)
@@ -602,7 +624,7 @@ def analyze_clip(clip, out_dir, M, progress=None):
         for d in s_.get("faces", []):
             d.pop("_crop", None)
     # ---- sound
-    if clip.get("has_audio") and M.cfg.get("deep_audio", True):
+    if clip.get("has_audio", True) is not False and M.cfg.get("deep_audio", True):
         try:
             aw = audio_windows(src if Path(src).suffix.lower() != ".braw" else clip["path"], M, dur)
         except Exception as e:
