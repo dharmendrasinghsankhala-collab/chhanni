@@ -1,6 +1,6 @@
 {
-  "version": "4.0.1",
-  "notes": "Fix: CLAP sound analysis with new transformers; better model self-tests.",
+  "version": "4.0.2",
+  "notes": "Fix: CLAP sound analysis, AI Team uses installed Qwen3-VL by default.",
   "requirements": [
     "numpy",
     "opencv-python"

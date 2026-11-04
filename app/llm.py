@@ -59,7 +59,7 @@ def _post(url, body, headers, timeout=180):
 def chat(system, user, want_json=True, settings=None, timeout=240):
     s = settings or load_settings()
     prov = s.get("llm_provider", "none")
-    model = s.get("llm_model") or DEFAULT_MODELS.get(prov, "")
+    model = s.get("llm_model") or (s.get("vlm_model") if prov == "ollama" else None) or DEFAULT_MODELS.get(prov, "")
     key = s.get("api_key", "")
     if prov == "none":
         raise RuntimeError("LLM provider set nahi hai (AI settings).")
