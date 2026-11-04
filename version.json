@@ -1,6 +1,6 @@
 {
-  "version": "4.0",
-  "notes": "Chhanni Studio: Deep analysis (shots, camera, faces, emotion, sound, Qwen3-VL), Library search, People, AI Team (Director/DOP/Editor/Producer/Concept), AI Models manager, crash-proof workers.",
+  "version": "4.0.1",
+  "notes": "Fix: CLAP sound analysis with new transformers; better model self-tests.",
   "requirements": [
     "numpy",
     "opencv-python"

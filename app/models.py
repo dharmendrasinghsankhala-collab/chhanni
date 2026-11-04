@@ -315,9 +315,9 @@ def install_state():
 # ------------------------------------------------------------------ self tests (run in a subprocess - safe)
 TEST_CODE = {
     "clip": "import ai_visual;assert ai_visual._load_clip();print(ai_visual.clip_text(['a dog']).shape)",
-    "shots": "import deep;m=deep.Models({});print('transnet', m.transnet() is not None)",
-    "clap": "import deep;m=deep.Models({});print('clap', m.clap() is not None)",
-    "faces": "import deep;m=deep.Models({});print('faces', m.face_rec() is not None)",
+    "shots": "import deep;m=deep.Models({});assert m.transnet() is not None;print('TransNetV2 ready')",
+    "clap": "import deep,numpy as np;m=deep.Models({});c=m.clap();assert c is not None;print('CLAP ready', c[4]['sounds'].shape)",
+    "faces": "import deep;m=deep.Models({});assert m.face_rec() is not None and m.face_det() is not None;print('YuNet + SFace ready')",
     "vlm": "import deep;print(deep.vlm_ping())",
     "whisper": "import ai_audio;print(ai_audio.whisper_available())",
 }

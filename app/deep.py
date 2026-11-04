@@ -176,7 +176,7 @@ class Models:
                 te = {}
                 for name, vocab in (("sounds", SOUNDS), ("moods", MOODS)):
                     t = p(text=[v for _, v in vocab], return_tensors="pt", padding=True)
-                    e = m.get_text_features(**{k: v.to(dev) for k, v in t.items()})
+                    e = _emb(m.get_text_features(**{k: v.to(dev) for k, v in t.items()}))
                     te[name] = (e / e.norm(dim=-1, keepdim=True)).float().cpu().numpy()
             return (m, p, dev, torch, te)
         return self._get("clap", load)
@@ -193,6 +193,17 @@ class Models:
                 raise RuntimeError(f"{name} pulled nahi hai (Models page)")
             return name
         return self._get("vlm", load)
+
+
+def _emb(out):
+    """transformers v4 returns a tensor, v5 returns a ModelOutput."""
+    if hasattr(out, "norm"):
+        return out
+    for k in ("text_embeds", "audio_embeds", "image_embeds", "pooler_output"):
+        v = getattr(out, k, None)
+        if v is not None:
+            return v
+    return out[0]
 
 
 def vlm_ping():
@@ -397,11 +408,13 @@ def audio_windows(src, M, dur, win=5.0):
     for i in range(0, len(starts), 16):
         chunk = [y[int(s * win * sr):int((s * win + win) * sr)] for s in starts[i:i + 16]]
         try:
-            inp = p(audios=chunk, sampling_rate=sr, return_tensors="pt")
-        except TypeError:
             inp = p(audio=chunk, sampling_rate=sr, return_tensors="pt")
+        except TypeError:
+            inp = p(audios=chunk, sampling_rate=sr, return_tensors="pt")
+        if "input_features" not in inp:
+            inp = p(audios=chunk, sampling_rate=sr, return_tensors="pt")
         with torch.no_grad():
-            e = m.get_audio_features(**{k: v.to(dev) for k, v in inp.items()})
+            e = _emb(m.get_audio_features(**{k: v.to(dev) for k, v in inp.items()}))
             e = (e / e.norm(dim=-1, keepdim=True)).float().cpu().numpy()
         ps = _softmax(e @ te["sounds"].T, 30)
         pm = _softmax(e @ te["moods"].T, 30)
