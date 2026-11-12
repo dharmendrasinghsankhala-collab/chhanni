@@ -436,6 +436,9 @@ class Handler(BaseHTTPRequestHandler):
             if u.path == "/api/people":
                 import people
                 return self._send(200, people.load(q["out"]))
+            if u.path == "/api/storage":
+                import cleanup
+                return self._send(200, cleanup.usage(q["out"]))
             if u.path == "/api/crew/saved":
                 import crew
                 return self._send(200, {"data": crew.load_saved(q["out"], q["name"])})
@@ -688,6 +691,15 @@ class Handler(BaseHTTPRequestHandler):
                 lst = [p for p in plan.recent_projects() if os.path.normcase(p["out"]) != os.path.normcase(b["out"])]
                 pf.write_text(json.dumps(lst, indent=1, ensure_ascii=False), encoding="utf-8")
                 return self._send(200, {"ok": True})
+            if u.path in ("/api/cleanup", "/api/delete_project"):
+                import cleanup
+                with JOB_LOCK:
+                    busy = JOB["running"] and os.path.normcase(str(JOB.get("out") or "")) == os.path.normcase(b["out"])
+                if busy:
+                    raise RuntimeError("Is project par abhi kaam chal raha hai - pehle Stop kijiye.")
+                if u.path == "/api/cleanup":
+                    return self._send(200, cleanup.clean(b["out"], b.get("ids") or []))
+                return self._send(200, cleanup.delete_project(b["out"], plan.app_data_dir()))
             if u.path == "/api/quit":
                 threading.Thread(target=lambda: (time.sleep(0.3), os._exit(0)), daemon=True).start()
                 return self._send(200, {"ok": True})

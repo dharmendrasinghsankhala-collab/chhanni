@@ -14,13 +14,13 @@ XP.models = async function pageModels() {
   const st = m.status, ins = m.install, set = m.settings || {};
   const groups = [...new Set(m.catalog.map(c => c.group))];
   const missing = m.catalog.filter(c => !st[c.id]?.ok).map(c => c.id);
-  main.innerHTML = `<div class="page"><div class="ph"><div><h1>AI Models</h1><p>Sab free, open-source, aapke PC par chalne wale models. Footage kahin upload nahi hoti.</p></div>
-    <div class="row">${missing.length ? `<button class="btn primary" id="mall" ${ins.running ? "disabled" : ""}>Install sab (${missing.length})</button>` : `<span class="chip ok"><i></i>Sab models ready</span>`}</div></div>
+  main.innerHTML = `<div class="page"><div class="ph"><div><h1>AI models</h1><p>Sab free, open-source, aapke PC par chalne wale models. Footage kahin upload nahi hoti.</p></div>
+    <div class="row">${missing.length ? `<button class="btn primary" id="mall" ${ins.running ? "disabled" : ""}>Install sab (${missing.length})</button>` : `<span class="chip ok"><i></i>All models ready</span>`}</div></div>
     <div class="card" style="margin-bottom:16px"><div class="row"><b>GPU:</b>&nbsp;<span class="${st.gpu?.cuda ? "" : "muted"}">${h(st.gpu?.name || "CUDA nahi mila (CPU par slow chalega)")}</span><span class="sp"></span>
       <span class="small muted">Qwen3-VL ke liye Ollama install hota hai (winget). Pehli baar ~10 GB download.</span></div></div>
     ${groups.map(g => `<h3 style="margin:18px 0 8px">${h(g)}</h3><div class="grid g2">${m.catalog.filter(c => c.group === g).map(c => {
       const s = st[c.id] || {}; const ok = s.ok;
-      return `<div class="card mcard"><div class="row"><b>${ok ? "✅" : s.partial ? "🟡" : "⬜"} ${h(c.name)}</b><span class="sp"></span><span class="small muted">${h(c.size)}</span></div>
+      return `<div class="card mcard"><div class="row"><b><span class="sdot ${ok ? "ok" : s.partial ? "part" : ""}"></span>${h(c.name)}</b><span class="sp"></span><span class="small muted">${h(c.size)}</span></div>
         <div class="small muted" style="margin:4px 0 8px">${h(c.what)} · ${h(c.use)}</div>
         <div class="row">${ok ? "" : `<button class="btn primary sm" data-inst="${c.id}" ${ins.running ? "disabled" : ""}>Install</button>`}
         ${["qc", "motion"].includes(c.id) ? "" : `<button class="btn sm" data-test="${c.id}" ${ok ? "" : "disabled"}>Test</button>`}<span class="small muted" id="tr_${c.id}"></span></div>
@@ -29,7 +29,7 @@ XP.models = async function pageModels() {
           <div class="field"><label>Description kab banaye</label><select class="input" id="vlmode"><option value="auto">Auto — har clip ke best shots</option><option value="all">Har shot (slow, sabse detail)</option><option value="off">Off</option></select></div></div>
           <div class="small muted">Pulled: ${h((s.pulled || []).join(", ") || "—")} ${s.ollama ? "" : s.ollama_installed ? "· Ollama band hai (Install dabane se start ho jayega)" : ""}</div>` : ""}</div>`;
     }).join("")}</div>`).join("")}
-    <div class="card" style="margin-top:16px"><div class="row"><h3>Install log</h3><span class="sp"></span><span class="small muted" id="ist">${ins.running ? "installing " + h(ins.item || "") + "…" : ins.error ? "❌ " + h(ins.error) : ""}</span></div>
+    <div class="card" style="margin-top:16px"><div class="row"><h3>Install log</h3><span class="sp"></span><span class="small muted" id="ist">${ins.running ? "installing " + h(ins.item || "") + "…" : ins.error ? "Error: " + h(ins.error) : ""}</span></div>
       <div class="console" id="mlog" style="height:220px"></div></div></div>`;
   const vm = $("#vlmm"); if (vm) { vm.value = set.vlm_model || "qwen3-vl:8b-instruct"; vm.onchange = async () => { await api("/api/ai/settings", { vlm_model: vm.value }); XP.models(); }; }
   const vo = $("#vlmode"); if (vo) { vo.value = set.vlm_mode || "auto"; vo.onchange = () => api("/api/ai/settings", { vlm_mode: vo.value }).then(() => toast("Saved")); }
@@ -37,12 +37,12 @@ XP.models = async function pageModels() {
   $("#mall") && ($("#mall").onclick = () => install(missing));
   $$("[data-inst]").forEach(b => b.onclick = () => install([b.dataset.inst]));
   $$("[data-test]").forEach(b => b.onclick = async () => { const o = $("#tr_" + b.dataset.test); o.textContent = "testing… (pehli baar model load hota hai)"; busy(b, true, "…");
-    try { const r = await api("/api/models/test", { item: b.dataset.test }); o.textContent = (r.ok ? "✅ " : "❌ ") + r.out.split("\n").slice(-1)[0].slice(0, 140); } catch (e) { o.textContent = "❌ " + e.message; } busy(b, false); });
+    try { const r = await api("/api/models/test", { item: b.dataset.test }); o.textContent = (r.ok ? "OK · " : "Failed · ") + r.out.split("\n").slice(-1)[0].slice(0, 140); } catch (e) { o.textContent = "Failed · " + e.message; } busy(b, false); });
   const draw = l => { const c = $("#mlog"); if (!c) return; c.innerHTML = (l || []).map(x => `<div>${h(x[1])}</div>`).join(""); c.scrollTop = 1e9; };
   draw(ins.log);
   async function watch() {
     if (S.route !== "models") return;
-    try { const r = await api("/api/models"); draw(r.install.log); $("#ist").textContent = r.install.running ? "installing " + (r.install.item || "") + "…" : r.install.error ? "❌ " + r.install.error : "done";
+    try { const r = await api("/api/models"); draw(r.install.log); $("#ist").textContent = r.install.running ? "installing " + (r.install.item || "") + "…" : r.install.error ? "Error: " + r.install.error : "done";
       if (r.install.running) setTimeout(watch, 1500); else XP.models(); } catch { setTimeout(watch, 3000); }
   }
   if (ins.running) watch();
@@ -67,8 +67,8 @@ XP.deep = async function pageDeep() {
       <div class="kv" style="margin-top:8px"><div><b>${ds.done}/${ds.clips}</b><span>clips done</span></div><div><b id="dpct">—</b><span>progress</span></div><div><b id="deta">—</b><span>time left</span></div><div><b>${nf}</b><span>skipped</span></div></div>
       <div class="bar" style="margin-top:10px"><div id="dbar" style="width:${ds.clips ? ds.done / ds.clips * 100 : 0}%"></div></div>
       <div class="small muted" id="dcur" style="margin-top:6px"></div>
-      ${nf ? `<div class="small" style="margin-top:8px;color:#ffd166">Skipped: ${Object.values(ds.failed).slice(0, 6).map(f => h(f.name)).join(", ")}${nf > 6 ? "…" : ""} <a class="btn ghost sm" id="dretry">Retry</a></div>` : ""}
-      ${!st.clip?.ok || !st.vlm?.ok ? `<div class="small muted" style="margin-top:8px">Tip: jo models ⬜ hain unke bina bhi analysis chalega, bas woh hissa khali rahega. Models page se install kar sakte hain.</div>` : ""}</div>
+      ${nf ? `<div class="note" style="margin-top:8px">Skipped: ${Object.values(ds.failed).slice(0, 6).map(f => h(f.name)).join(", ")}${nf > 6 ? "…" : ""} <a class="btn ghost sm" id="dretry">Retry</a></div>` : ""}
+      ${!st.clip?.ok || !st.vlm?.ok ? `<div class="small muted" style="margin-top:8px">Tip: jo models install nahi hain unke bina bhi analysis chalega, bas woh hissa khali rahega. Models page se install kar sakte hain.</div>` : ""}</div>
     <div class="card" style="margin-top:16px"><div class="row"><h3>Log</h3><span class="sp"></span><span class="small muted">Koi model crash ho to sirf woh clip skip hota hai, app chalta rehta hai</span></div><div class="console" id="dlog" style="height:260px"></div></div>
     ${ds.done ? `<div class="row" style="margin-top:16px"><button class="btn primary" onclick="go('library')">Library mein search karo →</button><button class="btn" onclick="go('people')">People →</button><button class="btn" onclick="go('crew')">AI Team →</button></div>` : ""}</div>`;
   $("#dvlm").value = set.vlm_mode || "auto"; $("#dsnd").value = set.deep_audio === false ? "0" : "1"; $("#dfac").value = set.deep_faces === false ? "0" : "1";
@@ -127,7 +127,7 @@ XP.library = async function pageLibrary() {
       return `<div class="lcard ${on ? "on" : ""}" data-i="${i}"><div class="lth" style="background-image:url('${kfURL(x.kf)}')"><span class="ltc">${fmtS(x.start)}–${fmtS(x.end)}</span>${x.beauty ? `<span class="lbe">${x.beauty}</span>` : ""}</div>
         <div class="lmeta"><div class="small ellip" title="${h(x.name)}">${h(x.name)}</div>${x.desc ? `<div class="small muted clamp2">${h(x.desc)}</div>` : ""}
         <div class="tags">${[LABEL[x.size] || x.size, x.camera !== "static" ? x.camera : "", x.emotion, x.scene, x.sound, ...(x.person || [])].filter(Boolean).slice(0, 6).map(t => `<span class="tg">${h(t)}</span>`).join("")}</div>
-        ${x.said ? `<div class="small clamp2" style="color:#9ecbff">“${h(x.said)}”</div>` : ""}</div></div>`;
+        ${x.said ? `<div class="small clamp2 quote">“${h(x.said)}”</div>` : ""}</div></div>`;
     }).join("") : `<div class="empty">Kuch nahi mila. Doosre shabd ya kam filters try kijiye.</div>`;
     $$("#lres .lcard").forEach(el => el.onclick = () => {
       const x = S.lib.res[+el.dataset.i]; const k = S.lib.picks.findIndex(p => p.clip === x.clip && p.seg === x.seg);
@@ -156,7 +156,7 @@ XP.people = async function pagePeople() {
 };
 
 /* ------------------------------------------------------------ AI Team */
-const ROLE_ICON = { director: "🎬", dop: "🎥", editor: "✂️", producer: "📋", concept: "💡" };
+const ROLE_ICON = { director: "", dop: "", editor: "", producer: "", concept: "" };
 const ROLE_NAME = { director: "Director", dop: "DOP", editor: "Editor", producer: "Producer", concept: "Concept maker" };
 function briefGet() { try { return JSON.parse(localStorage.getItem("chhanni.brief." + S.out) || "{}"); } catch { return {}; } }
 XP.crew = async function pageCrew() {
@@ -167,14 +167,14 @@ XP.crew = async function pageCrew() {
   const vlist = (vers.versions || vers || []);
   main.innerHTML = `<div class="page"><div class="ph"><div><h1>AI Team</h1><p>Concept maker, Director, DOP, Editor aur Producer — duniya ke best filmmakers ke usoolon (Murch Rule of Six, hook, structure, contrast) se sochne wali team.</p></div>
     <div class="row"><span class="chip ${llmOk ? "ok" : "warn"}"><i></i>${llmOk ? h(s.llm_provider + " · " + (s.llm_model || "")) : "Dimaag set nahi"}</span><a class="btn ghost sm" onclick="go('ai')">Change</a></div></div>
-    ${llmOk ? "" : `<div class="card" style="margin-bottom:16px;border-color:#6b5420">AI Team ko ek LLM chahiye. Free/local: <b>Models → Qwen3-VL install</b> (khud set ho jayega). Ya Settings mein Claude / Gemini key daaliye (zyada smart).</div>`}
+    ${llmOk ? "" : `<div class="card" style="margin-bottom:16px;border-color:#4a3c1e">AI Team ko ek LLM chahiye. Free/local: <b>Models → Qwen3-VL install</b> (khud set ho jayega). Ya Settings mein Claude / Gemini key daaliye (zyada smart).</div>`}
     <div class="card"><h3>Brief</h3><div class="grid g3">
       <div class="field"><label>Genre</label><select class="input" id="bg"><option>documentary</option><option>feature film</option><option>short film</option><option>music video</option><option>ad film</option><option>brand film</option><option>reel / short</option><option>wedding film</option><option>corporate</option></select></div>
       <div class="field"><label>Platform</label><select class="input" id="bp"><option>YouTube</option><option>Instagram reel</option><option>OTT / Netflix-style</option><option>TV</option><option>Film festival</option><option>Cinema</option><option>Client presentation</option></select></div>
       <div class="field"><label>Length</label><input class="input" id="bd" placeholder="e.g. 3 min, 30 sec, 52 min" value="${h(b.duration || "")}"></div></div>
       <div class="grid g2"><div class="field"><label>Audience</label><input class="input" id="ba" placeholder="e.g. young Indian audience, global festival jury" value="${h(b.audience || "")}"></div>
       <div class="field"><label>Notes (kahani, brand, mood, kya zaroori hai)</label><input class="input" id="bn" placeholder="e.g. Langa musicians ki virasat, garv aur dard dono" value="${h(b.notes || "")}"></div></div></div>
-    <div class="vtabs" style="margin:16px 0 10px"><a class="vtab ${tab === "concept" ? "on" : ""}" data-t="concept">💡 Concepts & hooks</a><a class="vtab ${tab === "review" ? "on" : ""}" data-t="review">🎬 Version review</a><a class="vtab ${tab === "ask" ? "on" : ""}" data-t="ask">💬 Crew se poochho</a></div>
+    <div class="vtabs" style="margin:16px 0 10px"><a class="vtab ${tab === "concept" ? "on" : ""}" data-t="concept">Concepts &amp; hooks</a><a class="vtab ${tab === "review" ? "on" : ""}" data-t="review">Version review</a><a class="vtab ${tab === "ask" ? "on" : ""}" data-t="ask">Crew se poochho</a></div>
     <div id="ctab"></div></div>`;
   $("#bg").value = b.genre || "documentary"; $("#bp").value = b.platform || "YouTube";
   const brief = () => { const o = { genre: $("#bg").value, platform: $("#bp").value, duration: $("#bd").value, audience: $("#ba").value, notes: $("#bn").value }; localStorage.setItem("chhanni.brief." + S.out, JSON.stringify(o)); return o; };
@@ -187,7 +187,7 @@ XP.crew = async function pageCrew() {
       <div style="margin:4px 0 8px"><b>${h(c.logline || "")}</b></div>${c.theme ? `<div class="small muted">Theme: ${h(c.theme)}</div>` : ""}
       ${c.hook ? `<div class="hookbox"><b>Hook:</b> ${h(c.hook.idea || "")}<div class="kfrow">${(c.hook.refs || []).map(refThumb).join("")}</div></div>` : ""}
       ${(c.structure || []).map(st => `<div class="beat"><b>${h(st.part || "")}</b> — ${h(st.beat || "")}<div class="kfrow">${(st.refs || []).map(refThumb).join("")}</div></div>`).join("")}
-      <div class="small" style="margin-top:8px">🎵 ${h(c.music_mood || "")} · <span class="muted">${h(c.why_it_works || "")}</span></div></div>`).join("");
+      <div class="small" style="margin-top:8px">Music: ${h(c.music_mood || "")} · <span class="muted">${h(c.why_it_works || "")}</span></div></div>`).join("");
     T.innerHTML = `<div class="row" style="margin-bottom:12px"><button class="btn primary" id="cgo" ${llmOk ? "" : "disabled"}>${saved ? "Naye concepts banao" : "Footage se concepts banao"}</button><span class="small muted">Deep analysis ka data use hota hai · local model par 1–3 min</span></div><div id="cout">${saved ? draw(saved) : ""}</div>`;
     $("#cgo").onclick = async () => { busy($("#cgo"), true, "Team soch rahi hai…"); try { const r = await api("/api/crew/concept", { out: S.out, brief: brief() }); $("#cout").innerHTML = draw(r); } catch (e) { toast(e.message, 1); } busy($("#cgo"), false); };
   } else if (tab === "review") {
@@ -196,22 +196,22 @@ XP.crew = async function pageCrew() {
     const drawR = r => `<div class="card" style="margin-bottom:12px"><div class="row"><h3>Team score: ${r.score ?? "—"}/10</h3><span class="sp"></span>
         ${r.plan?.length ? `<button class="btn primary" id="rapply">Plan apply karke naya version banao</button>` : ""}</div>
         ${r.plan?.length ? `<div class="small" style="margin-top:6px">Final plan: ${r.plan.map(p => `<span class="tg">${h(p)}</span>`).join(" ")}</div>` : ""}</div>
-      <div class="grid g2">${Object.entries(r.roles || {}).map(([role, x]) => `<div class="card"><div class="row"><h3>${ROLE_ICON[role] || ""} ${ROLE_NAME[role] || role}</h3><span class="sp"></span><b>${x.score ?? ""}${x.score != null ? "/10" : ""}</b></div>
+      <div class="grid g2">${Object.entries(r.roles || {}).map(([role, x]) => `<div class="card"><div class="row"><h3>${ROLE_NAME[role] || role}</h3><span class="sp"></span><b>${x.score ?? ""}${x.score != null ? "/10" : ""}</b></div>
         ${x.error ? `<div class="small" style="color:#ff8a8a">${h(x.error)}</div>` : `<div class="small" style="margin:4px 0 8px"><i>${h(x.verdict || "")}</i></div>
-        ${(x.strengths || []).map(t => `<div class="small">✅ ${h(t)}</div>`).join("")}
-        ${(x.problems || []).map(p => `<div class="small" style="margin-top:6px">⚠️ <b>${h(p.at || "")}</b> ${h(p.issue || "")}<br><span class="muted">→ ${h(p.fix || "")}</span></div>`).join("")}`}</div>`).join("")}</div>`;
+        ${(x.strengths || []).map(t => `<div class="small"><span class="sdot ok"></span>${h(t)}</div>`).join("")}
+        ${(x.problems || []).map(p => `<div class="small" style="margin-top:6px"><span class="sdot part"></span><b>${h(p.at || "")}</b> ${h(p.issue || "")}<br><span class="muted">→ ${h(p.fix || "")}</span></div>`).join("")}`}</div>`).join("")}</div>`;
     const load = async () => { const id = $("#rv").value; if (!id) return; try { const r = (await api("/api/crew/saved?out=" + enc(S.out) + "&name=review_" + id)).data; $("#rout").innerHTML = r ? drawR(r) : ""; bindApply(r); } catch { } };
     const bindApply = r => { $("#rapply") && ($("#rapply").onclick = async () => { try { await api("/api/regenerate", { out: S.out, id: $("#rv").value, instruction: r.plan.join(", ") }); toast("Naya version ban gaya"); go("assemble"); } catch (e) { toast(e.message, 1); } }); };
     $("#rv").onchange = load; load();
     $("#rgo").onclick = async () => { busy($("#rgo"), true, "Review chal raha hai…"); try { const r = await api("/api/crew/review", { out: S.out, version: $("#rv").value, brief: brief() }); $("#rout").innerHTML = drawR(r); bindApply(r); } catch (e) { toast(e.message, 1); } busy($("#rgo"), false); };
   } else {
-    T.innerHTML = `<div class="card"><div class="row"><select class="input" id="ar" style="width:180px">${Object.keys(ROLE_NAME).map(k => `<option value="${k}">${ROLE_ICON[k]} ${ROLE_NAME[k]}</option>`).join("")}</select>
+    T.innerHTML = `<div class="card"><div class="row"><select class="input" id="ar" style="width:180px">${Object.keys(ROLE_NAME).map(k => `<option value="${k}">${ROLE_NAME[k]}</option>`).join("")}</select>
       <select class="input" id="av" style="width:260px"><option value="">(koi version nahi — sirf footage)</option>${vlist.map(v => `<option value="${h(v.id)}">${h(v.name)}</option>`).join("")}</select></div>
       <div class="row" style="margin-top:10px"><input class="input" id="aq" style="flex:1" placeholder="e.g. Is documentary ka sabse strong opening kya hoga? / Kaunse shots sabse cinematic hain?"><button class="btn primary" id="ago" ${llmOk ? "" : "disabled"}>Poochho</button></div>
       <div id="aout" style="margin-top:12px;white-space:pre-wrap"></div></div>`;
     $("#aq").onkeydown = e => { if (e.key === "Enter") $("#ago").click(); };
     $("#ago").onclick = async () => { const q = $("#aq").value.trim(); if (!q) return; busy($("#ago"), true, "…"); $("#aout").textContent = "Soch raha hai…";
-      try { const r = await api("/api/crew/ask", { out: S.out, role: $("#ar").value, q, brief: brief(), version: $("#av").value || null }); $("#aout").textContent = r.answer; } catch (e) { $("#aout").textContent = "❌ " + e.message; } busy($("#ago"), false); };
+      try { const r = await api("/api/crew/ask", { out: S.out, role: $("#ar").value, q, brief: brief(), version: $("#av").value || null }); $("#aout").textContent = r.answer; } catch (e) { $("#aout").textContent = "Error: " + e.message; } busy($("#ago"), false); };
   }
 };
 function refThumb(r) { return Array.isArray(r) ? `<div class="kft" title="${h(r[0])}" style="background-image:url('${kfURL(`${r[0]}_${String(r[1]).padStart(4, "0")}.jpg`)}')"></div>` : ""; }

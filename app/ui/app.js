@@ -22,7 +22,7 @@ function toast(msg, err) {
   const t = $("#toast"); t.textContent = msg; t.className = "show" + (err ? " err" : "");
   clearTimeout(t._t); t._t = setTimeout(() => t.className = "", err ? 6000 : 3000);
 }
-const fmtB = b => b > 1e12 ? (b / 1e12).toFixed(2) + " TB" : b > 1e9 ? (b / 1e9).toFixed(1) + " GB" : (b / 1e6).toFixed(0) + " MB";
+const fmtB = b => b > 1e12 ? (b / 1e12).toFixed(2) + " TB" : b > 1e9 ? (b / 1e9).toFixed(1) + " GB" : b >= 1e6 ? (b / 1e6).toFixed(0) + " MB" : b >= 1e3 ? (b / 1e3).toFixed(0) + " KB" : (b || 0) + " B";
 const fmtT = s => { s = Math.max(0, Math.round(s || 0)); const hh = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60), ss = s % 60;
   return hh ? `${hh}:${String(m).padStart(2, "0")}:${String(ss).padStart(2, "0")}` : `${m}:${String(ss).padStart(2, "0")}`; };
 const fmtETA = s => s == null ? "—" : s < 60 ? "< 1 min" : s < 3600 ? Math.round(s / 60) + " min" : (s / 3600).toFixed(1) + " h";
@@ -36,6 +36,8 @@ const ICON = {
   play: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 4v16l13-8z"/></svg>',
   stop: '<svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>',
   tune: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></svg>',
+  trash: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg>',
+  db: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v14c0 1.7 3.6 3 8 3s8-1.3 8-3V5"/></svg>',
   open: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 4h6v6M20 4l-9 9M19 14v6H4V5h6"/></svg>',
 };
 
@@ -45,34 +47,35 @@ function go(route, out) {
   location.hash = "#/" + route;
 }
 window.addEventListener("hashchange", render);
+$("#navproj").onclick = () => go("home");
 $$("#nav a").forEach(a => a.onclick = () => go(a.dataset.r));
 
 async function render() {
   S.route = (location.hash.slice(2) || "home").split("/")[0];
   $$("#nav a").forEach(a => {
     a.classList.toggle("on", a.dataset.r === S.route);
-    if (["run", "review", "export", "assemble", "deep", "library", "people", "crew"].includes(a.dataset.r)) a.classList.toggle("dis", !S.out);
+    if (["run", "review", "export", "assemble", "deep", "library", "people", "crew", "storage"].includes(a.dataset.r)) a.classList.toggle("dis", !S.out);
   });
   if (S.out && (!S.project || S.project.out !== S.out)) {
     try { S.project = await api("/api/project?out=" + enc(S.out)); } catch { S.project = null; }
   }
-  $("#navproj").textContent = S.project ? S.project.name : "No project open";
+  $("#navproj").innerHTML = S.project ? `<small>Project</small>${h(S.project.name)}` : `<small>Project</small><span class="muted">None open</span>`;
   main.scrollTop = 0;
-  const pages = Object.assign({ home: pageHome, new: pageNew, run: pageRun, review: pageReview, export: pageExport, assemble: pageAssemble, ai: pageAI }, window.EXTRA_PAGES || {});
+  const pages = Object.assign({ home: pageHome, new: pageNew, run: pageRun, review: pageReview, export: pageExport, assemble: pageAssemble, ai: pageAI, storage: pageStorage }, window.EXTRA_PAGES || {});
   (pages[S.route] || pageHome)();
 }
 
 /* ------------------------------------------------------------ home */
 async function pageHome() {
   main.innerHTML = `<div class="page"><div class="ph"><div><h1>Projects</h1><p>Har project = ek footage set aur uska analysis. Footage kahin move nahi hota.</p></div>
-    <button class="btn primary big" id="np">${ICON.plus}New project</button></div><div class="projects" id="plist"><div class="empty">Loading…</div></div></div>`;
+    <button class="btn primary" id="np">${ICON.plus}New project</button></div><div class="projects" id="plist"><div class="empty">Loading…</div></div></div>`;
   $("#np").onclick = () => { S.draft = { name: "", folders: [], preset: "balanced", settings: {}, scan: null }; go("new"); };
   let d;
   try { d = await api("/api/projects"); } catch (e) { return toast(e.message, 1); }
   S.presets = d.presets; S.root = d.root;
   const cards = d.projects.map(p => {
     const s = p.summary || {};
-    return `<div class="card proj" data-out="${h(p.out)}"><button class="btn ghost x" data-forget="${h(p.out)}" title="List se hatayein">${ICON.x}</button>
+    return `<div class="card proj" data-out="${h(p.out)}"><div class="acts"><button class="btn ghost icon" data-store="${h(p.out)}" title="Storage / purana data hatao">${ICON.db}</button><button class="btn ghost icon" data-forget="${h(p.out)}" title="Sirf list se hatayein (data rahega)">${ICON.x}</button></div>
       <div class="nm">${h(p.name)}</div><div class="path">${h(p.out)}</div>
       ${p.summary ? `<div class="stats"><div class="stat"><b>${s.clips}</b><span>clips</span></div><div class="stat"><b>${s.hours} h</b><span>footage</span></div>
       <div class="stat"><b>${s.selects}</b><span>selects</span></div><div class="stat"><b>${s.select_min} m</b><span>selected</span></div></div>`
@@ -82,11 +85,12 @@ async function pageHome() {
   $("#plist").innerHTML = `<div class="card proj newproj" id="np2">${ICON.plus}<b>New project</b><span class="small">Footage folders chuniye aur analysis shuru kijiye</span></div>` + cards;
   $("#np2").onclick = $("#np").onclick;
   $$(".proj[data-out]").forEach(el => el.onclick = (ev) => {
-    if (ev.target.closest("[data-forget]")) return;
+    if (ev.target.closest(".acts")) return;
     const p = d.projects.find(x => x.out === el.dataset.out);
     go(p.summary ? "review" : "run", el.dataset.out);
   });
   $$("[data-forget]").forEach(b => b.onclick = async () => { await api("/api/forget", { out: b.dataset.forget }); pageHome(); });
+  $$("[data-store]").forEach(b => b.onclick = () => go("storage", b.dataset.store));
 }
 
 /* ------------------------------------------------------------ new project */
@@ -180,9 +184,9 @@ function pageRun() {
   main.innerHTML = `<div class="page"><div class="ph"><div><h1>${h(p.name || "Analyze")}</h1><p class="small">${h(p.out || "")}</p></div>
     <div class="row" id="runbtns"></div></div>
     <div class="card"><div class="runhead">
-      <div class="ring"><svg viewBox="0 0 120 120"><circle cx="60" cy="60" r="52" stroke="#262b36" stroke-width="10" fill="none"/>
-        <circle id="arc" cx="60" cy="60" r="52" stroke="url(#rg)" stroke-width="10" fill="none" stroke-linecap="round" stroke-dasharray="326.7" stroke-dashoffset="326.7"/>
-        <defs><linearGradient id="rg"><stop offset="0" stop-color="#f2a93b"/><stop offset="1" stop-color="#ffbe5c"/></linearGradient></defs></svg>
+      <div class="ring"><svg viewBox="0 0 120 120"><circle cx="60" cy="60" r="52" stroke="#222428" stroke-width="6" fill="none"/>
+        <circle id="arc" cx="60" cy="60" r="52" stroke="url(#rg)" stroke-width="6" fill="none" stroke-linecap="round" stroke-dasharray="326.7" stroke-dashoffset="326.7"/>
+        <defs><linearGradient id="rg"><stop offset="0" stop-color="#d6a24a"/><stop offset="1" stop-color="#e3b768"/></linearGradient></defs></svg>
         <div class="pct"><b id="pct">0%</b><span id="phase">idle</span></div></div>
       <div class="kv"><div><b id="k_files">—</b><span>files</span></div><div><b id="k_eta">—</b><span>time left</span></div>
         <div><b id="k_el">—</b><span>elapsed</span></div><div><b id="k_err">0</b><span>errors</span></div></div></div>
@@ -459,6 +463,59 @@ function pageExport() {
   };
 }
 
+/* ------------------------------------------------------------ storage & cleanup */
+const ST_COL = { versions: "#4b8df0", script: "#8a8e97", crew: "#9a7bd8", exports: "#5bb0a8", enhanced: "#46a771", transcripts: "#c98a4b", deep: "#d6a24a", cache: "#5b5f68" };
+async function pageStorage() {
+  if (!S.out) return go("home");
+  main.innerHTML = `<div class="page"><div class="empty">Loading…</div></div>`;
+  let u; try { u = await api("/api/storage?out=" + enc(S.out)); } catch (e) { return toast(e.message, 1); }
+  const p = S.project || {};
+  const busyHere = S.job?.running && S.job.out === S.out;
+  const used = u.categories.filter(c => c.size > 0);
+  main.innerHTML = `<div class="page"><div class="ph"><div><div class="crumb">${h(p.name || "")}</div><h1>Storage</h1>
+      <p>Purana data hatakar jagah khali kijiye. Sirf Chhanni ki banayi files hat-ti hain — aapki footage kabhi delete nahi hoti.</p></div>
+      <div class="row"><button class="btn" id="stopen">${ICON.folder}Folder kholo</button></div></div>
+    ${busyHere ? `<div class="card note" style="margin-bottom:14px">Is project par abhi kaam chal raha hai — cleanup ke liye pehle Stop kijiye.</div>` : ""}
+    <div class="card"><div class="row"><h3>Project data</h3><span class="sp"></span><b>${fmtB(u.total)}</b></div>
+      <div class="meter">${used.map(c => `<div title="${h(c.label)} · ${fmtB(c.size)}" style="width:${c.size / Math.max(1, u.total) * 100}%;background:${ST_COL[c.id]}"></div>`).join("")}</div>
+      <div class="small muted" style="margin-bottom:8px">${h(u.out)}</div>
+      <div class="stlist">${u.categories.map(c => `<label class="strow ${c.size ? "" : "empty-row"}"><input type="checkbox" data-cat="${c.id}" ${c.size ? "" : "disabled"}>
+        <div><div><span class="sdot" style="background:${ST_COL[c.id]}"></span>${h(c.label)}</div><div class="small muted" style="margin-left:14px">${h(c.hint)}</div></div>
+        <span class="ct">${c.count ? c.count + (c.count === 1 ? " file" : " files") : "—"}</span><span class="sz">${c.size ? fmtB(c.size) : "—"}</span></label>`).join("")}</div>
+      <div class="row" style="margin-top:14px"><span class="small muted" id="stsel">Kuch select nahi</span><span class="sp"></span>
+        <button class="btn danger" id="stclean" disabled>${ICON.trash}Selected hatao</button></div></div>
+    <div class="card danger-zone" style="margin-top:14px"><div class="row"><div><h3>Poora project delete</h3>
+      <div class="sub" style="margin:0">Analysis, selects, review, versions, script — sab. Project list se bhi hat jayega. Footage safe rahegi.</div></div><span class="sp"></span>
+      <button class="btn danger" id="stdel" ${busyHere ? "disabled" : ""}>Delete project…</button></div></div></div>`;
+  const sel = () => $$("[data-cat]:checked").map(x => x.dataset.cat);
+  const upd = () => {
+    const ids = sel(), b = u.categories.filter(c => ids.includes(c.id)).reduce((a, c) => a + c.size, 0);
+    $("#stsel").textContent = ids.length ? `${ids.length} selected · ${fmtB(b)} khali hoga` : "Kuch select nahi";
+    $("#stclean").disabled = !ids.length || busyHere;
+  };
+  $$("[data-cat]").forEach(x => x.onchange = upd);
+  $("#stopen").onclick = () => api("/api/reveal", { path: u.out });
+  $("#stclean").onclick = async () => {
+    const ids = sel(); if (!ids.length) return;
+    const names = u.categories.filter(c => ids.includes(c.id)).map(c => c.label).join(", ");
+    const heavy = ids.some(i => ["cache", "deep", "transcripts"].includes(i));
+    if (!confirm(`Ye hataun?\n\n${names}\n\n${heavy ? "Dhyan dein: cache / deep / transcript dobara banane mein ghante lag sakte hain.\n" : ""}Ye wapas nahi aayega.`)) return;
+    try { const r = await api("/api/cleanup", { out: S.out, ids }); toast(`${fmtB(r.freed)} khali hua`); S.results = null; if (ids.includes("versions")) S.asm = null; pageStorage(); }
+    catch (e) { toast(e.message, 1); }
+  };
+  $("#stdel").onclick = async () => {
+    const nm = p.name || u.out.split(/[\\/]/).pop();
+    const t = prompt(`Poora project "${nm}" delete karne ke liye uska naam type kijiye:`);
+    if (t === null) return;
+    if (t.trim() !== nm.trim()) return toast("Naam match nahi hua — kuch delete nahi hua", 1);
+    try {
+      const r = await api("/api/delete_project", { out: S.out });
+      toast(`Project delete · ${fmtB(r.freed)} khali${r.left?.length ? " · folder mein aapki doosri files rakhi gayi" : ""}`);
+      S.project = null; S.results = null; S.asm = null; go("home", "");
+    } catch (e) { toast(e.message, 1); }
+  };
+}
+
 /* ------------------------------------------------------------ boot */
 render(); poll();
 
@@ -481,17 +538,17 @@ async function pageAI() {
   let up = {}; try { up = await api("/api/update/status"); } catch {}
   const s = st.settings || {}, uc = up.config || {};
   main.innerHTML = `<div class="page"><div class="ph"><div><h1>Settings</h1><p>Updates, AI models aur LLM. Sab kuch local aur free chal sakta hai.</p></div></div>
-  <div class="card" style="margin-bottom:16px"><div class="row"><div><h3>⬆️ Updates</h3><div class="sub" style="margin:0">Installed: <b>Chhanni ${h(up.local || "?")}</b>${up.remote ? ` · GitHub par: <b>${h(up.remote)}</b>` : ""}${up.checked ? ` · checked ${h(up.checked)}` : ""}</div></div><span class="sp"></span>
+  <div class="card" style="margin-bottom:16px"><div class="row"><div><h3>Updates</h3><div class="sub" style="margin:0">Installed: <b>Chhanni ${h(up.local || "?")}</b>${up.remote ? ` · GitHub par: <b>${h(up.remote)}</b>` : ""}${up.checked ? ` · checked ${h(up.checked)}` : ""}</div></div><span class="sp"></span>
     ${up.available ? `<button class="btn primary" id="upgo">Update to ${h(up.remote)}</button>` : ""}<button class="btn" id="upchk">Check now</button><button class="btn ghost" id="uprb" title="Pichla version wapas">Rollback</button></div>
-    ${up.available && up.notes ? `<div class="small" style="margin-top:8px;color:#ffd166">Naya: ${h(up.notes)}</div>` : ""}
+    ${up.available && up.notes ? `<div class="note" style="margin-top:8px">Naya: ${h(up.notes)}</div>` : ""}
     <div class="grid g3" style="margin-top:12px"><div class="field"><label>GitHub repo (owner/name)</label><input class="input" id="uprepo" placeholder="aapka-username/chhanni" value="${h(uc.repo || "")}"></div>
       <div class="field"><label>Token (sirf private repo ke liye) ${uc.has_token ? '<span class="muted">(saved)</span>' : ""}</label><input class="input" id="uptok" type="password" placeholder="${uc.has_token ? "unchanged" : "public repo ho to khali chhodiye"}"></div>
       <div class="field"><label>&nbsp;</label><label class="switch"><input type="checkbox" id="upauto" ${uc.auto !== false ? "checked" : ""}><i></i>App khulte hi update check karo</label></div></div>
     <div class="console" id="uplog" style="height:auto;max-height:160px;display:none"></div></div>
   <div class="status" style="margin-bottom:16px">
-    <div class="st-card"><b>${st.whisper ? "✅" : "⬜"} Whisper (transcription)</b><span class="small muted">faster-whisper · local GPU · Hindi / English / Hinglish</span></div>
-    <div class="st-card"><b>${st.clip ? "✅" : "⬜"} CLIP (visual AI tags)</b><span class="small muted">drone, rooms, scenes, aesthetic score · local GPU</span></div>
-    <div class="st-card"><b>✅ Built-in QC &amp; tags</b><span class="small muted">shake, blur, exposure, shot size, movement, golden hour, hero score</span></div></div>
+    <div class="st-card"><b><span class="sdot ${st.whisper ? "ok" : ""}"></span>Whisper (transcription)</b><span class="small muted">faster-whisper · local GPU · Hindi / English / Hinglish</span></div>
+    <div class="st-card"><b><span class="sdot ${st.clip ? "ok" : ""}"></span>CLIP (visual AI tags)</b><span class="small muted">drone, rooms, scenes, aesthetic score · local GPU</span></div>
+    <div class="st-card"><b><span class="sdot ok"></span>Built-in QC &amp; tags</b><span class="small muted">shake, blur, exposure, shot size, movement, golden hour, hero score</span></div></div>
   ${!st.whisper || !st.clip ? `<div class="card" style="margin-bottom:16px"><div class="row"><div><h3>AI pack install kijiye</h3><div class="sub" style="margin:0">~3–4 GB download (PyTorch CUDA, faster-whisper, CLIP). Ek baar. Models pehli baar use par download honge.</div></div><span class="sp"></span><button class="btn primary" id="inst">Install AI pack</button></div></div>` : ""}
   <div class="grid g2">
     <div class="card"><h3>Transcription</h3><div class="sub">Model aur bhasha. large-v3 Hindi ke liye sabse accurate; turbo 3–4× tez.</div>
@@ -511,7 +568,7 @@ async function pageAI() {
   const save = async () => { await api("/api/ai/settings", { whisper_model: $("#wm").value, language: $("#lg").value, use_clip: $("#uc").value === "false" ? false : "auto",
     llm_provider: $("#pv").value, llm_model: $("#md").value, api_key: $("#ky").value || null, base_url: $("#bu").value }); toast("Saved"); };
   $("#sv").onclick = save; ["wm", "lg", "uc"].forEach(i => $("#" + i).onchange = save);
-  $("#tl").onclick = async () => { await save(); $("#tlr").textContent = "testing…"; try { await api("/api/ai/test_llm", {}); $("#tlr").textContent = "✅ working"; } catch (e) { $("#tlr").textContent = "❌ " + e.message; } };
+  $("#tl").onclick = async () => { await save(); $("#tlr").textContent = "testing…"; try { await api("/api/ai/test_llm", {}); $("#tlr").textContent = "Working"; } catch (e) { $("#tlr").textContent = "Error: " + e.message; } };
   const saveUp = async () => api("/api/update/config", { repo: $("#uprepo").value.trim(), token: $("#uptok").value || null, auto: $("#upauto").checked });
   $("#uprepo").onchange = saveUp; $("#upauto").onchange = saveUp; $("#uptok").onchange = saveUp;
   $("#upchk").onclick = async () => { try { await saveUp(); const r = await api("/api/update/check", {}); toast(r.available ? `Naya version ${r.remote} available` : r.configured ? "Aap latest version par hain" : "Pehle GitHub repo daaliye"); pageAI(); } catch (e) { toast(e.message, 1); } };
@@ -523,12 +580,12 @@ async function pageAI() {
 
 /* ------------------------------------------------------------ Script & assemble */
 const MODES = [
-  ["reel", "📱", "Reel / Promo", "Talking-head reel: tight cuts, zoom, captions, hook, CTA"],
-  ["documentary", "🎙️", "Documentary", "Script / outline order, best takes + B-roll coverage"],
-  ["film", "🎬", "Film scene", "Dialogue lines → best take, angle variety"],
-  ["music_video", "🎵", "Music video", "Cuts on beats, energy-driven"],
-  ["real_estate", "🏠", "Real estate", "Aerial → exterior → rooms, smooth moves"],
-  ["hero_reel", "⭐", "Hero reel", "Best shots, beat-snapped"],
+  ["reel", "Reel / Promo", "Talking-head reel: tight cuts, zoom, captions, hook, CTA"],
+  ["documentary", "Documentary", "Script / outline order, best takes + B-roll coverage"],
+  ["film", "Film scene", "Dialogue lines → best take, angle variety"],
+  ["music_video", "Music video", "Cuts on beats, energy-driven"],
+  ["real_estate", "Real estate", "Aerial → exterior → rooms, smooth moves"],
+  ["hero_reel", "Hero reel", "Best shots, beat-snapped"],
 ];
 async function pageAssemble() {
   if (!S.out) return go("home");
@@ -537,8 +594,8 @@ async function pageAssemble() {
   let script = ""; try { script = (await api("/api/script?out=" + enc(S.out))).text; } catch {}
   let vs = []; try { vs = (await api("/api/versions?out=" + enc(S.out))).versions; } catch {}
   main.innerHTML = `<div class="page"><div class="ph"><div><h1>Script &amp; assemble</h1><p>Script daaliye → features ON/OFF kijiye → versions banaiye → instruction se sudhaariye → NLE mein bhejiye.</p></div></div>
-  <div class="card" style="margin-bottom:16px"><h3>1 · Mode</h3><div class="modes" id="modes" style="margin-top:10px;grid-template-columns:repeat(6,1fr)">${MODES.map(([k, ic, t, d]) => `<div class="mode ${A.mode === k ? "on" : ""}" data-m="${k}"><span class="ic">${ic}</span><b>${t}</b><span>${d}</span></div>`).join("")}</div></div>
-  <div class="grid g2"><div class="card"><div class="row"><h3>2 · Script / outline</h3><span class="sp"></span><button class="btn ghost small" id="ld">Load .txt</button></div>
+  <div class="card" style="margin-bottom:16px"><h3>1 · Mode</h3><div class="modes" id="modes" style="margin-top:10px;grid-template-columns:repeat(6,1fr)">${MODES.map(([k, t, d]) => `<div class="mode ${A.mode === k ? "on" : ""}" data-m="${k}"><b>${t}</b><span>${d}</span></div>`).join("")}</div></div>
+  <div class="grid g2"><div class="card"><div class="row"><h3>2 · Script / outline</h3><span class="sp"></span><button class="btn ghost small" id="ld">Load .txt</button><button class="btn ghost small" id="clr" title="Script hatao">Clear</button></div>
       <div class="sub">Formats: <span class="kbd">NAME: line</span> <span class="kbd">*[Staff 1]* line</span> <span class="kbd">[BASEMENT]</span> <span class="kbd">SHOT: …</span> <span class="kbd"># Section</span> <span class="kbd">(5s)</span>. Hindi, Hinglish, English. Script khali chhodein to reel saari achhi lines se banegi.</div>
       <textarea class="input" id="sc" placeholder="# Opening&#10;[drone shot of the fort at sunset]&#10;Raju: Yeh kila teen sau saal purana hai">${h(script)}</textarea>
       <label class="switch" style="margin-top:10px"><input type="checkbox" id="cc" ${A.concept ? "checked" : ""}><i></i>Ye sirf concept / brief hai — LLM interviews se story banaye</label></div>
@@ -564,13 +621,15 @@ async function pageAssemble() {
   $("#cc").onchange = e => A.concept = e.target.checked;
   $("#ld").onclick = async () => { const r = await api("/api/browse_file", { title: "Script (.txt)", kind: "text" }); if (r.path?.text) $("#sc").value = r.path.text; };
   $("#sc").onchange = () => api("/api/script", { out: S.out, text: $("#sc").value }).catch(() => {});
+  $("#clr").onclick = async () => { if (!$("#sc").value.trim() || !confirm("Script hata dein? (Versions par asar nahi padega)")) return; $("#sc").value = ""; await api("/api/script", { out: S.out, text: "" }).catch(() => {}); toast("Script clear"); };
   const drawTabs = () => {
     const sel = vs.find(v => v.id === A.vid);
     const latest = vs[0]?.batch;
     const shown = A.allv ? vs : vs.filter(v => v.batch === latest || v.id === A.vid || (sel && v.root === sel.root));
-    $("#vtabs").innerHTML = (vs.length ? shown.slice(0, 60).map(v => `<div class="vtab ${v.id === A.vid ? "on" : ""}" data-v="${v.id}">${h(v.name)}${v.instruction ? `<span class="vtag" title="${h(v.instruction)}">✎</span>` : ""}<small>${h(v.mode)} · ${fmtT(v.duration)} · ${v.n_items || ""} clips · ${h(v.created || "")}</small></div>`).join("") : `<span class="muted small">Abhi koi version nahi.</span>`)
+    $("#vtabs").innerHTML = (vs.length ? shown.slice(0, 60).map(v => `<div class="vtab ${v.id === A.vid ? "on" : ""}" data-v="${v.id}">${h(v.name)}${v.instruction ? `<span class="vtag" title="${h(v.instruction)}">edited</span>` : ""}<small>${h(v.mode)} · ${fmtT(v.duration)} · ${v.n_items || ""} clips · ${h(v.created || "")}</small></div>`).join("") : `<span class="muted small">Abhi koi version nahi.</span>`)
       + (vs.length > shown.length || A.allv ? `<button class="btn ghost small" id="allv">${A.allv ? "Sirf latest" : `Purane versions (${vs.length - shown.length})`}</button>` : "")
-      + (vs.length > 1 ? `<button class="btn ghost small" id="delold">Purane versions delete karo</button>` : "");
+      + (vs.length > 1 ? `<button class="btn ghost small" id="delold">Purane versions delete karo</button>` : "")
+      + (vs.length ? `<button class="btn ghost small" id="delall">Sab delete</button>` : "");
     $("#allv") && ($("#allv").onclick = () => { A.allv = !A.allv; drawTabs(); });
     $("#delold") && ($("#delold").onclick = async () => {
       const cur = vs.find(v => v.id === A.vid);
@@ -578,6 +637,10 @@ async function pageAssemble() {
       const ids = vs.filter(v => !keep.has(v.id)).map(v => v.id);
       if (!ids.length) return toast("Delete karne ko kuch nahi");
       await api("/api/delete_version", { out: S.out, ids }); vs = vs.filter(v => keep.has(v.id)); drawTabs(); toast(`${ids.length} purane versions delete`);
+    });
+    $("#delall") && ($("#delall").onclick = async () => {
+      if (!confirm(`Saari ${vs.length} versions delete karein? Ye wapas nahi aayengi.`)) return;
+      await api("/api/delete_version", { out: S.out, ids: vs.map(v => v.id) }); vs = []; A.vid = null; $("#vview").innerHTML = ""; drawTabs(); toast("Saari versions delete");
     });
     $$("#vtabs .vtab").forEach(el => el.onclick = () => { A.vid = el.dataset.v; drawTabs(); showVersion(A.vid, refresh); });
   };
@@ -606,23 +669,23 @@ async function showVersion(id, refresh) {
   const titleRow = (v.titles || []).length ? `<div class="trk" data-n="T" style="width:${px}px">${v.titles.map(t => `<div class="ci V2" style="left:${t.rec / dur * px}px;width:${Math.max(3, t.dur / dur * px - 1)}px;background:#8a6a1f">${h(t.kind)}: ${h(t.text)}</div>`).join("")}</div>` : "";
   const capRow = (v.captions || []).length ? `<div class="trk" data-n="CC" style="width:${px}px">${v.captions.map(c => `<div class="ci" style="left:${c.start / dur * px}px;width:${Math.max(2, (c.end - c.start) / dur * px - 1)}px;background:#3a3f4a">${h(c.text)}</div>`).join("")}</div>` : "";
   const tl = `<div class="tl"><div style="width:${px + 40}px">${titleRow}${capRow}${tracks.map(t => `<div class="trk" data-n="${t}" style="width:${px}px">${v.items.filter(i => i.track === t).map(i =>
-    `<div class="ci ${t} ${i.label === "dialogue" ? "dlg" : ""}" title="${h(i.name)} ${fmtT(i.start)}–${fmtT(i.end)} ${h(i.text || "")}${i.zoom ? " · zoom " + Math.round(i.zoom * 100) + "%" : ""}" style="left:${i.rec / dur * px}px;width:${Math.max(3, (i.end - i.start) / dur * px - 1)}px">${i.zoom ? "🔍 " : ""}${h(i.text ? i.text.slice(0, 40) : i.name)}</div>`).join("")}</div>`).join("")}</div></div>`;
+    `<div class="ci ${t} ${i.label === "dialogue" ? "dlg" : ""}" title="${h(i.name)} ${fmtT(i.start)}–${fmtT(i.end)} ${h(i.text || "")}${i.zoom ? " · zoom " + Math.round(i.zoom * 100) + "%" : ""}" style="left:${i.rec / dur * px}px;width:${Math.max(3, (i.end - i.start) / dur * px - 1)}px">${i.zoom ? "Z · " : ""}${h(i.text ? i.text.slice(0, 40) : i.name)}</div>`).join("")}</div>`).join("")}</div></div>`;
   let n = 0;
   const rows = (v.beats || []).map(b => {
     if (b.kind === "section") return `<tr><td colspan="4"><b>${h(b.text)}</b></td></tr>`;
     n++;
     const t = b.take; const pc = t ? Math.round(t.sim * 100) : null;
-    return `<tr style="${b.removed ? "opacity:.45" : ""}"><td>${n}</td><td>${b.kind === "dialogue" ? "🗣️" : "🎞️"} ${b.speaker ? `<b>${h(b.speaker)}:</b> ` : ""}${h(b.text)}${b.removed ? ` <span class="pill bad">hataya</span>` : ""}</td>
+    return `<tr style="${b.removed ? "opacity:.45" : ""}"><td>${n}</td><td><span class="kind">${b.kind === "dialogue" ? "DLG" : "VIS"}</span>${b.speaker ? `<b>${h(b.speaker)}:</b> ` : ""}${h(b.text)}${b.removed ? ` <span class="pill bad">hataya</span>` : ""}</td>
       <td>${t ? `<b>${h(t.name)}</b> ${fmtT(t.start)}–${fmtT(t.end)}<div class="small muted">${h((t.text || "").slice(0, 160))}</div>` : b.missing ? `<span class="pill bad">match nahi — VO / pickup</span>${(b.alts || [])[0] ? `<div class="small muted">closest: ${h(b.alts[0].name)} (${Math.round(b.alts[0].sim * 100)}%) · ${h((b.alts[0].text || "").slice(0, 80))}</div>` : ""}` : (b.broll || []).slice(0, 2).map(p => `${h(p.name)} <span class="small muted">${h(p.move || "")}</span>`).join("<br>")}</td>
       <td>${pc != null ? `<span class="pill ${pc >= 70 ? "ok" : pc >= 50 ? "mid" : "bad"}">${pc}%</span>${(b.alts || []).length > 1 ? `<div class="small muted">${b.alts.length - 1} alt takes</div>` : ""}` : ""}</td></tr>`;
   }).join("");
-  $("#vview").innerHTML = `<div class="row" style="margin-bottom:6px"><b>${h(v.name)}</b><span class="muted small">${fmtT(v.duration)} · ${v.items.length} items${v.aspect ? " · " + v.aspect : ""}${(v.captions || []).length ? ` · ${v.captions.length} captions` : ""}</span>${v.instruction ? `<span class="small muted">✎ "${h(v.instruction)}"</span>` : ""}<span class="sp"></span>
+  $("#vview").innerHTML = `<div class="row" style="margin-bottom:6px"><b>${h(v.name)}</b><span class="muted small">${fmtT(v.duration)} · ${v.items.length} items${v.aspect ? " · " + v.aspect : ""}${(v.captions || []).length ? ` · ${v.captions.length} captions` : ""}</span>${v.instruction ? `<span class="small muted">"${h(v.instruction)}"</span>` : ""}<span class="sp"></span>
     <label class="switch" style="margin:0 10px 0 0"><input type="checkbox" id="vrep" ${RO.replace ? "checked" : ""}><i></i>Purani timeline replace</label>
     <label class="switch" style="margin:0 10px 0 0"><input type="checkbox" id="vsm" checked><i></i>HFR slow-mo</label>
-    <button class="btn" id="vx">Export XML</button><button class="btn primary" id="vr">Send to Resolve</button><button class="btn ghost" id="vdel" title="Version delete">🗑</button></div>
+    <button class="btn" id="vx">Export XML</button><button class="btn primary" id="vr">Send to Resolve</button><button class="btn ghost icon" id="vdel" title="Version delete">${ICON.trash}</button></div>
     ${v.mode === "reel" || v.source ? `<div class="instr"><input class="input" id="vin" placeholder='Instruction: "30 sec karo, B-roll zyada" · "staff 3 hatao" · "line 2 ka dusra take" · "hook: Dulhe raja yahan bante hain" · "zoom hatao"'>
       <button class="btn" id="vsw">${ICON.tune}Switches</button><button class="btn primary" id="vgo">Regenerate</button></div><div id="vswp"></div>` : ""}
-    ${(v.notes || []).map(x => `<div class="small" style="color:#ffd166;margin-bottom:6px">⚠ ${h(x)}</div>`).join("")}${tl}
+    ${(v.notes || []).map(x => `<div class="note">${h(x)}</div>`).join("")}${tl}
     <div class="small muted" style="margin:8px 0">Premiere: <span class="kbd">Window › Extensions › Chhanni</span> → Versions → Import. Captions SRT: project ke <span class="kbd">exports</span> folder mein. Resolve mein word-highlight ke liye subtitle track par <b>Effects › Titles › Animated Subtitles</b> daaliye.</div>
     ${rows ? `<table class="beats"><tr><th>#</th><th>Script</th><th>Match</th><th>Score</th></tr>${rows}</table>` : ""}`;
   $("#vrep").onchange = e => { const o = ropts(); o.replace = e.target.checked; saveRopts(o); };
@@ -651,7 +714,7 @@ async function showVersion(id, refresh) {
     const box = $("#vswp");
     if (box.innerHTML) { box.innerHTML = ""; return; }
     const o = fromEngine(v.opts || toEngine(ropts()));
-    box.innerHTML = `<div class="card" style="margin:8px 0;background:#12151b">${featuresHTML(o, "vs_")}<div class="row" style="margin-top:10px"><span class="sp"></span><button class="btn primary" id="vswgo">In switches ke saath regenerate</button></div></div>`;
+    box.innerHTML = `<div class="card" style="margin:8px 0;background:var(--bg)">${featuresHTML(o, "vs_")}<div class="row" style="margin-top:10px"><span class="sp"></span><button class="btn primary" id="vswgo">In switches ke saath regenerate</button></div></div>`;
     bindFeatures(box, o);
     $("#vswgo").onclick = () => { const e = toEngine(o); delete e.variations; regen(e); };
   });
@@ -659,27 +722,27 @@ async function showVersion(id, refresh) {
 
 /* ------------------------------------------------------------ v3.3 reel feature switches */
 const FEATURES = [
-  ["🧹 Cleanup", [
+  ["Cleanup", [
     ["remove_bad_takes", "Bad takes & false starts hatao", "bool"],
     ["drop_fillers", "Filler words hatao (umm, uh, अं)", "bool"],
     ["remove_silences", "Silences hatao", "bool", ["pause", "Gap (sec)", "range", 0.15, 0.8, 0.05]],
     ["drop_clipped", "Audio clipping wale takes hatao", "bool"],
     ["stable_broll", "Sirf stable & sharp B-roll", "bool"]]],
-  ["🎬 Visual", [
+  ["Visual", [
     ["broll_on", "B-roll add karo", "bool", ["broll", "Amount", "select", [["some", "Kam"], ["more", "Zyada"]]]],
     ["zoom", "Zoom cuts (jump cut par punch-in)", "bool", ["zoom_level", "Zoom", "range", 1.05, 1.3, 0.01]],
     ["color_balance", "Auto colour balance (Resolve, beta)", "bool"],
     ["smart_reframe", "Smart Reframe (Resolve Studio)", "bool"]]],
-  ["🔤 Text", [
+  ["Text", [
     ["hook", "Text hook (shuru mein)", "bool", ["hook_text", "Hook text (khali = pehli line)", "text"]],
     ["captions", "Word-by-word captions", "bool", ["caption_words", "Shabd per caption", "range", 1, 4, 1]],
     ["lower_third", "Name lower-third", "bool", ["lower_third_text", "Jaise: Shailesh Birani – Owner", "text"]],
     ["cta", "CTA end card", "bool", ["cta_text", "Address / phone / offer", "text"]]]],
-  ["🔊 Audio", [
+  ["Audio", [
     ["enhance_audio", "Enhance audio (denoise, -14 LUFS)", "bool"],
     ["music_on", "Background music", "bool", ["music", "Music file", "file"], ["music_db", "Level dB", "range", -32, -8, 1]],
     ["sfx_on", "Sound effects (B-roll/zoom par whoosh)", "bool", ["sfx", "SFX file", "file"]]]],
-  ["📐 Structure & output", [
+  ["Structure & output", [
     ["target_on", "Target length", "bool", ["target_sec", "Seconds", "select", [[15, "15s"], [30, "30s"], [45, "45s"], [60, "60s"], [90, "90s"]]]],
     ["auto_hook", "Best line pehle (auto hook)", "bool"],
     ["aspect_x", "Format", "fixed", ["aspect", "", "select", [["9:16", "9:16 Reel"], ["16:9", "16:9 YouTube"], ["1:1", "1:1"], ["4:5", "4:5"]]]],
@@ -765,7 +828,7 @@ async function autoUpdateCheck() {
     if (r.available) {
       const b = document.createElement("div");
       b.className = "mini-run"; b.style.borderColor = "var(--accent)";
-      b.innerHTML = `<div class="small"><b>⬆️ Chhanni ${h(r.remote)}</b> available</div><button class="btn primary small" style="margin-top:6px;width:100%">Update</button>`;
+      b.innerHTML = `<div class="small"><b>Chhanni ${h(r.remote)}</b> available</div><button class="btn primary small" style="margin-top:6px;width:100%">Update</button>`;
       b.querySelector("button").onclick = doUpdate;
       $("#minirun").after(b);
     }

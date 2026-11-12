@@ -62,6 +62,11 @@ Naya version "· v2, v3…" banta hai; **Send to Resolve** "Purani timeline repl
 Resolve: captions subtitle track par aate hain — word-highlight ke liye **Effects › Titles › Animated Subtitles** ko subtitle track ke upar daaliye.
 Hook / naam / CTA Text+ titles top track par. Premiere: captions track + zoom; titles markers ke roop mein.
 
+## Naya in v4.1 — Storage & naya look
+- **Storage** (sidebar › Edit › Storage, ya Projects card par database icon): har project ka data size dikhata hai — versions, script, AI Team notes, XML exports, enhanced audio, transcripts, deep analysis, cache + thumbnails. Jo chahiye select karke hatao. **Poora project delete** bhi (naam type karke confirm). Sirf Chhanni ki banayi files hat-ti hain — footage kabhi delete nahi hoti; project folder mein aapki apni files hon to woh rehti hain.
+- Script & assemble: script ke paas **Clear** button, versions mein **Sab delete**.
+- GUI: saaf, minimal dark theme; sidebar ab Footage / Edit / System groups mein.
+
 ## Proxies
 - Resolve/camera proxies (`Proxy` folder) aur Sony `M4ROOT\SUB` files analysis ke liye apne aap use hoti hain, jisse kaam bahut tez hota hai.
 - Timeline hamesha original camera files se banti hai.
