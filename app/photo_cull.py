@@ -215,8 +215,8 @@ def stage2():
         expo = 1.0 - 3 * max(0, r["clip_hi"] - 0.01) - max(0, r["clip_lo"] - 0.35)
         if f and f["luma"]:
             expo -= max(0, (45 - f["luma"]) / 90) + max(0, (f["luma"] - 235) / 40)   # face too dark / blown
-        r["tech"] = round(max(0.0, 0.55 * (fsharp if fsharp is not None else s) + 0.25 * s + 0.2 * max(0, expo)), 3)
-        r["blur"] = (fsharp is not None and fsharp < 0.25) or s < 0.2
+        r["tech"] = round(float(max(0.0, 0.55 * (fsharp if fsharp is not None else s) + 0.25 * s + 0.2 * max(0, expo))), 3)
+        r["blur"] = bool((fsharp is not None and fsharp < 0.25) or s < 0.2)
     for bi, b in enumerate(bursts):
         best = max(b, key=lambda n: rows[n]["tech"] + 0.3 * rows[n]["aes"])
         for n in b:
