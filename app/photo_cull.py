@@ -19,7 +19,9 @@ STAGE = sys.argv[2] if len(sys.argv) > 2 else "all"
 OUT = SRC.parent / "_Chhanni Cull"
 OUT.mkdir(exist_ok=True)
 LOG = OUT / "log.txt"
-YUNET = Path(os.path.expandvars(r"%LOCALAPPDATA%\Chhanni\app\app\models\face_detection_yunet_2023mar.onnx"))
+YUNET = Path(__file__).resolve().parent / "models" / "face_detection_yunet_2023mar.onnx"
+if not YUNET.exists():
+    YUNET = Path(os.path.expandvars(r"%LOCALAPPDATA%\Chhanni\app\app\models\face_detection_yunet_2023mar.onnx"))
 OLLAMA = "http://127.0.0.1:11434"
 VLM = "qwen3-vl:8b-instruct"
 

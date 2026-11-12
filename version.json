@@ -1,6 +1,6 @@
 {
-  "version": "4.1.0",
-  "notes": "Naya Storage page: purana data, versions, script, cache hatao ya poora project delete karo (footage safe). GUI ab saaf aur minimal.",
+  "version": "4.1.1",
+  "notes": "Naya Photo cull page; delete kiya project ab sidebar/Review mein nahi dikhega; update ke baad notification hat jayega.",
   "requirements": [
     "numpy",
     "opencv-python"

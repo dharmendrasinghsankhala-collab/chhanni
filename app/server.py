@@ -62,7 +62,8 @@ _GPU = {"name": None, "checked": False}
 
 def project_info(out):
     out = Path(out)
-    info = {"out": str(out), "name": out.name, "exists": out.exists()}
+    info = {"out": str(out), "name": out.name, "exists": out.exists(),
+            "has_data": (out / "project.json").exists() or (out / "selects.json").exists()}
     try:
         info.update(json.loads((out / "project.json").read_text(encoding="utf-8")))
     except Exception:
@@ -252,6 +253,64 @@ def start_job(out, folders, mode):
     threading.Thread(target=run_job, args=(out, folders, mode), daemon=True).start()
 
 
+# ------------------------------------------------------------------ photo cull (separate process)
+CULL = {"proc": None, "folder": None}
+
+
+def cull_out(folder):
+    return Path(folder).parent / "_Chhanni Cull"
+
+
+def cull_start(folder, stage="all"):
+    folder = os.path.normpath((folder or "").strip().strip('"'))
+    if not folder or not os.path.isdir(folder):
+        raise RuntimeError("Photo folder nahi mila.")
+    if CULL["proc"] and CULL["proc"].poll() is None:
+        raise RuntimeError("Photo cull pehle se chal raha hai.")
+    jpgs = sum(1 for f in os.listdir(folder) if f.lower().endswith(".jpg"))
+    if not jpgs:
+        raise RuntimeError("Is folder mein JPG nahi mile (camera RAW + JPG chahiye).")
+    od = cull_out(folder)
+    od.mkdir(exist_ok=True)
+    (od / "status.json").write_text(json.dumps({"stage": "starting", "done": 0, "total": jpgs, "t": time.time()}),
+                                    encoding="utf-8")
+    exe = sys.executable
+    if exe.lower().endswith("pythonw.exe"):
+        exe = exe[:-5] + ".exe"
+    CULL["proc"] = subprocess.Popen([exe, str(APP_DIR / "photo_cull.py"), folder, str(stage or "all")],
+                                    cwd=str(APP_DIR), creationflags=NO_WINDOW,
+                                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    CULL["folder"] = folder
+    return {"ok": True, "jpgs": jpgs}
+
+
+def cull_status(folder):
+    od = cull_out(folder)
+    running = bool(CULL["proc"] and CULL["proc"].poll() is None and
+                   os.path.normcase(CULL["folder"] or "") == os.path.normcase(os.path.normpath(folder)))
+    st, log, rep = {}, [], None
+    try:
+        st = json.loads((od / "status.json").read_text(encoding="utf-8"))
+    except Exception:
+        pass
+    try:
+        log = (od / "log.txt").read_text(encoding="utf-8", errors="ignore").splitlines()[-80:]
+    except Exception:
+        pass
+    rp = od / "report.json"
+    if rp.exists() and not running:
+        try:
+            rep = json.loads(rp.read_text(encoding="utf-8")).get("report")
+            rep = {"total": rep.get("total"), "hero": len(rep.get("hero", [])), "best": len(rep.get("best", [])),
+                   "counts": rep.get("counts", {})}
+        except Exception:
+            rep = None
+    if st.get("stage") not in (None, "done", "error") and not running:
+        st["stage"] = "stopped"
+    return {"running": running, "status": st, "log": log, "report": rep, "out": str(od),
+            "selects": str(Path(folder).parent / "_Chhanni Selects")}
+
+
 # ------------------------------------------------------------------ helpers
 def pick_folder(title="Footage folder chuniye"):
     code = ("import tkinter as tk; from tkinter import filedialog; r=tk.Tk(); r.withdraw(); "
@@ -320,6 +379,17 @@ class Handler(BaseHTTPRequestHandler):
     def log_message(self, *a):
         pass
 
+    def _send_image(self, p):
+        st = p.stat()
+        tag = f'"{st.st_mtime_ns:x}-{st.st_size:x}"'
+        if self.headers.get("If-None-Match") == tag:
+            self.send_response(304)
+            self.send_header("ETag", tag)
+            self.send_header("Cache-Control", "no-cache")
+            self.end_headers()
+            return
+        return self._send(200, p.read_bytes(), "image/jpeg", {"ETag": tag, "Cache-Control": "no-cache"})
+
     def _send(self, code, body, ctype="application/json; charset=utf-8", extra=None):
         if isinstance(body, (dict, list)):
             body = json.dumps(body, ensure_ascii=False).encode("utf-8")
@@ -330,8 +400,10 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Access-Control-Allow-Origin", "*")
         self.send_header("Access-Control-Allow-Headers", "Content-Type")
-        self.send_header("Cache-Control", "max-age=3600" if ctype.startswith(("image/", "video/", "audio/")) else "no-store")
-        for k, v in (extra or {}).items():
+        extra = dict(extra or {})
+        self.send_header("Cache-Control", extra.pop("Cache-Control", None) or
+                         ("max-age=3600" if ctype.startswith(("image/", "video/", "audio/")) else "no-store"))
+        for k, v in extra.items():
             self.send_header(k, v)
         self.end_headers()
         self.wfile.write(body)
@@ -401,6 +473,7 @@ class Handler(BaseHTTPRequestHandler):
                 except Exception:
                     pass
                 st.update(config=updater.public_cfg(), local=updater.local_version())
+                st["available"] = bool(st.get("remote")) and updater._vtuple(st["remote"]) > updater._vtuple(st["local"])
                 return self._send(200, st)
             if u.path == "/api/script":
                 p = Path(q["out"]) / "script.txt"
@@ -421,7 +494,7 @@ class Handler(BaseHTTPRequestHandler):
                 name = os.path.basename(unquote(u.path[len("/kf/"):]))
                 p = Path(q.get("out", "")) / "deep" / "kf" / name
                 if p.exists():
-                    return self._send(200, p.read_bytes(), "image/jpeg")
+                    return self._send_image(p)
                 return self._send(404, b"", "text/plain")
             if u.path == "/api/models":
                 import models
@@ -436,6 +509,8 @@ class Handler(BaseHTTPRequestHandler):
             if u.path == "/api/people":
                 import people
                 return self._send(200, people.load(q["out"]))
+            if u.path == "/api/cull/status":
+                return self._send(200, cull_status(q["folder"]))
             if u.path == "/api/storage":
                 import cleanup
                 return self._send(200, cleanup.usage(q["out"]))
@@ -447,7 +522,7 @@ class Handler(BaseHTTPRequestHandler):
                 name = os.path.basename(unquote(u.path[len("/thumbs/"):]))
                 p = Path(out) / "thumbs" / name
                 if p.exists():
-                    return self._send(200, p.read_bytes(), "image/jpeg")
+                    return self._send_image(p)
                 return self._send(404, b"", "text/plain")
             # static UI
             rel = unquote(u.path.lstrip("/")) or "index.html"
@@ -690,6 +765,12 @@ class Handler(BaseHTTPRequestHandler):
                 pf = Path(plan.app_data_dir()) / "projects.json"
                 lst = [p for p in plan.recent_projects() if os.path.normcase(p["out"]) != os.path.normcase(b["out"])]
                 pf.write_text(json.dumps(lst, indent=1, ensure_ascii=False), encoding="utf-8")
+                return self._send(200, {"ok": True})
+            if u.path == "/api/cull/start":
+                return self._send(200, cull_start(b.get("folder"), b.get("stage") or "all"))
+            if u.path == "/api/cull/stop":
+                if CULL["proc"] and CULL["proc"].poll() is None:
+                    CULL["proc"].terminate()
                 return self._send(200, {"ok": True})
             if u.path in ("/api/cleanup", "/api/delete_project"):
                 import cleanup

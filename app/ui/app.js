@@ -58,11 +58,18 @@ async function render() {
   });
   if (S.out && (!S.project || S.project.out !== S.out)) {
     try { S.project = await api("/api/project?out=" + enc(S.out)); } catch { S.project = null; }
+    if (!S.project || S.project.has_data === false) closeProject();   // deleted / moved project
   }
+  $$("#nav a").forEach(a => { if (["run", "review", "export", "assemble", "deep", "library", "people", "crew", "storage"].includes(a.dataset.r)) a.classList.toggle("dis", !S.out); });
   $("#navproj").innerHTML = S.project ? `<small>Project</small>${h(S.project.name)}` : `<small>Project</small><span class="muted">None open</span>`;
   main.scrollTop = 0;
   const pages = Object.assign({ home: pageHome, new: pageNew, run: pageRun, review: pageReview, export: pageExport, assemble: pageAssemble, ai: pageAI, storage: pageStorage }, window.EXTRA_PAGES || {});
   (pages[S.route] || pageHome)();
+}
+
+function closeProject() {
+  S.out = null; S.project = null; S.results = null; S.review = null; S.asm = null; S.lib = null;
+  try { localStorage.setItem("chhanni.out", ""); } catch {}
 }
 
 /* ------------------------------------------------------------ home */
@@ -75,7 +82,7 @@ async function pageHome() {
   S.presets = d.presets; S.root = d.root;
   const cards = d.projects.map(p => {
     const s = p.summary || {};
-    return `<div class="card proj" data-out="${h(p.out)}"><div class="acts"><button class="btn ghost icon" data-store="${h(p.out)}" title="Storage / purana data hatao">${ICON.db}</button><button class="btn ghost icon" data-forget="${h(p.out)}" title="Sirf list se hatayein (data rahega)">${ICON.x}</button></div>
+    return `<div class="card proj" data-out="${h(p.out)}"><div class="acts"><button class="btn ghost icon" data-store="${h(p.out)}" title="Storage / purana data hatao">${ICON.db}</button><button class="btn ghost icon" data-del="${h(p.out)}" data-name="${h(p.name)}" title="Project delete karo">${ICON.trash}</button></div>
       <div class="nm">${h(p.name)}</div><div class="path">${h(p.out)}</div>
       ${p.summary ? `<div class="stats"><div class="stat"><b>${s.clips}</b><span>clips</span></div><div class="stat"><b>${s.hours} h</b><span>footage</span></div>
       <div class="stat"><b>${s.selects}</b><span>selects</span></div><div class="stat"><b>${s.select_min} m</b><span>selected</span></div></div>`
@@ -89,7 +96,14 @@ async function pageHome() {
     const p = d.projects.find(x => x.out === el.dataset.out);
     go(p.summary ? "review" : "run", el.dataset.out);
   });
-  $$("[data-forget]").forEach(b => b.onclick = async () => { await api("/api/forget", { out: b.dataset.forget }); pageHome(); });
+  $$("[data-del]").forEach(b => b.onclick = async () => {
+    if (!confirm(`"${b.dataset.name}" delete karein?\n\nAnalysis, selects, review, versions, script — sab hat jayega. Footage safe rahegi.\nYe wapas nahi aayega.`)) return;
+    try {
+      const r = await api("/api/delete_project", { out: b.dataset.del });
+      if (S.out === b.dataset.del) closeProject();
+      toast(`Project delete · ${fmtB(r.freed)} khali hua`); render();
+    } catch (e) { toast(e.message, 1); }
+  });
   $$("[data-store]").forEach(b => b.onclick = () => go("storage", b.dataset.store));
 }
 
@@ -279,8 +293,8 @@ async function poll() {
 async function pageReview() {
   if (!S.out) return go("home");
   main.innerHTML = `<div class="page"><div class="empty">Loading results…</div></div>`;
-  if (!S.results) {
-    try { S.results = await api("/api/results?out=" + enc(S.out)); S.review = S.results.review; }
+  if (!S.results || S.results._out !== S.out) {
+    try { S.results = await api("/api/results?out=" + enc(S.out)); S.results._out = S.out; S.review = S.results.review; }
     catch (e) { main.innerHTML = `<div class="page"><div class="card empty">Abhi results nahi hain. <a href="#/run">Analysis chalaiye</a>.</div></div>`; return; }
   }
   S.limit = 40;
@@ -486,6 +500,7 @@ async function pageStorage() {
         <button class="btn danger" id="stclean" disabled>${ICON.trash}Selected hatao</button></div></div>
     <div class="card danger-zone" style="margin-top:14px"><div class="row"><div><h3>Poora project delete</h3>
       <div class="sub" style="margin:0">Analysis, selects, review, versions, script — sab. Project list se bhi hat jayega. Footage safe rahegi.</div></div><span class="sp"></span>
+      <button class="btn ghost" id="stforget" title="Data rahega, sirf Projects list se hatega">Sirf list se hatao</button>
       <button class="btn danger" id="stdel" ${busyHere ? "disabled" : ""}>Delete project…</button></div></div></div>`;
   const sel = () => $$("[data-cat]:checked").map(x => x.dataset.cat);
   const upd = () => {
@@ -503,6 +518,7 @@ async function pageStorage() {
     try { const r = await api("/api/cleanup", { out: S.out, ids }); toast(`${fmtB(r.freed)} khali hua`); S.results = null; if (ids.includes("versions")) S.asm = null; pageStorage(); }
     catch (e) { toast(e.message, 1); }
   };
+  $("#stforget").onclick = async () => { await api("/api/forget", { out: S.out }); closeProject(); toast("List se hata diya (data folder mein hai)"); go("home"); };
   $("#stdel").onclick = async () => {
     const nm = p.name || u.out.split(/[\\/]/).pop();
     const t = prompt(`Poora project "${nm}" delete karne ke liye uska naam type kijiye:`);
@@ -511,7 +527,7 @@ async function pageStorage() {
     try {
       const r = await api("/api/delete_project", { out: S.out });
       toast(`Project delete · ${fmtB(r.freed)} khali${r.left?.length ? " · folder mein aapki doosri files rakhi gayi" : ""}`);
-      S.project = null; S.results = null; S.asm = null; go("home", "");
+      closeProject(); go("home");
     } catch (e) { toast(e.message, 1); }
   };
 }

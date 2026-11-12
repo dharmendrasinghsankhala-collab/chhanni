@@ -67,6 +67,9 @@ Hook / naam / CTA Text+ titles top track par. Premiere: captions track + zoom; t
 - Script & assemble: script ke paas **Clear** button, versions mein **Sab delete**.
 - GUI: saaf, minimal dark theme; sidebar ab Footage / Edit / System groups mein.
 
+## Photo cull (v4.1.1)
+Sidebar › Photos › **Photo cull**: dance / event photos ka folder chuniye (camera JPG, RAW + JPG best) → Start. Blur aur duplicates hat-te hain, Qwen3-VL best frames chunta hai, Lightroom ke liye star rating + colour label (XMP), aur `_Chhanni Selects` folder (Hero / Best / Poses / Moments). Camera files kabhi move / edit nahi hoti. Zaroori models: CLIP aur Qwen3-VL 8B (Models page).
+
 ## Proxies
 - Resolve/camera proxies (`Proxy` folder) aur Sony `M4ROOT\SUB` files analysis ke liye apne aap use hoti hain, jisse kaam bahut tez hota hai.
 - Timeline hamesha original camera files se banti hai.

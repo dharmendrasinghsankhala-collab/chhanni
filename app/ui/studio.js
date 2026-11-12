@@ -215,3 +215,62 @@ XP.crew = async function pageCrew() {
   }
 };
 function refThumb(r) { return Array.isArray(r) ? `<div class="kft" title="${h(r[0])}" style="background-image:url('${kfURL(`${r[0]}_${String(r[1]).padStart(4, "0")}.jpg`)}')"></div>` : ""; }
+
+/* ------------------------------------------------------------ Photo cull */
+function cullRecent() { try { return JSON.parse(localStorage.getItem("chhanni.cull") || "[]"); } catch { return []; } }
+function cullRemember(f) { try { localStorage.setItem("chhanni.cull", JSON.stringify([f, ...cullRecent().filter(x => x !== f)].slice(0, 8))); } catch { } }
+XP.photos = async function pagePhotos() {
+  const C = S.cull || (S.cull = { folder: cullRecent()[0] || "" });
+  let ms = null; try { ms = await api("/api/models"); } catch { }
+  const st = ms?.status || {}, pulled = st.vlm?.pulled || [];
+  const qwen = pulled.some(t => t.startsWith("qwen3-vl:8b-instruct"));
+  const chip = (ok, t) => `<span class="chip ${ok ? "ok" : "warn"}"><i></i>${t}</span>`;
+  main.innerHTML = `<div class="page"><div class="ph"><div><h1>Photo cull</h1><p>Dance / event photos ki chhanni: blur aur duplicates hatao, best frames chuno, Lightroom ke liye star rating + colour label (XMP), aur select folders. Camera files kabhi move / edit / delete nahi hoti.</p></div>
+      <div class="row">${chip(st.clip?.ok, "CLIP")}${chip(st.faces?.ok || true, "Faces")}${chip(qwen, "Qwen3-VL 8B")}<a class="btn ghost sm" onclick="go('models')">Models…</a></div></div>
+    <div class="card"><h3>Photo folder</h3><div class="sub">Ek shoot / card ka folder jisme camera <b>JPG</b> hon (RAW + JPG mode best — Sony .ARW ke saath XMP aur select folders bante hain). Results folder ke bagal mein <span class="kbd">_Chhanni Cull</span> aur <span class="kbd">_Chhanni Selects</span> mein.</div>
+      <div class="row"><input class="input" id="cf" style="flex:1;min-width:260px" placeholder="e.g. D:\\Shoots\\Arangetram\\DCIM\\100MSDCF" value="${h(C.folder)}">
+        <button class="btn" id="cbr">${ICON.folder}Browse</button>
+        <select class="input" id="cst" style="width:auto"><option value="all">Poora run (resume hota hai)</option><option value="4">Sirf ratings / folders dobara</option></select>
+        <button class="btn primary" id="cgo">${ICON.play}Start</button><button class="btn danger" id="cstop" style="display:none">${ICON.stop}Stop</button></div>
+      ${cullRecent().length ? `<div class="row small muted" style="margin-top:10px;gap:6px">Recent: ${cullRecent().map(f => `<a class="chip" data-rf="${h(f)}" style="cursor:pointer">${h(f.split(/[\\/]/).slice(-2).join("/"))}</a>`).join("")}</div>` : ""}
+      ${qwen ? "" : `<div class="note" style="margin-top:10px">Qwen3-VL 8B nahi mila — Models page par Qwen3-VL card mein "qwen3-vl 8B" chunkar Install kijiye. Iske bina judging step fail hoga.</div>`}</div>
+    <div class="card" style="margin-top:14px"><div class="row"><h3>Progress</h3><span class="sp"></span><span class="small muted" id="cstage">—</span></div>
+      <div class="kv" style="margin-top:10px"><div><b id="cdone">—</b><span>photos</span></div><div><b id="ceta">—</b><span>time left</span></div><div><b id="chero">—</b><span>hero (5★)</span></div><div><b id="cbest">—</b><span>best (4★)</span></div></div>
+      <div class="bar" style="margin-top:12px"><div id="cbar"></div></div>
+      <div class="row" style="margin-top:12px" id="cres"></div></div>
+    <div class="card" style="margin-top:14px"><h3>Log</h3><div class="console" id="clog" style="height:220px;margin-top:8px"></div></div></div>`;
+  const setF = f => { C.folder = f; $("#cf").value = f; tick(true); };
+  $("#cf").onchange = e => setF(e.target.value.trim().replace(/^"|"$/g, ""));
+  $("#cbr").onclick = async () => { const r = await api("/api/browse", { title: "Photo folder chuniye" }); if (r.path) setF(r.path); };
+  $$("[data-rf]").forEach(a => a.onclick = () => setF(a.dataset.rf));
+  $("#cgo").onclick = async () => {
+    const f = $("#cf").value.trim().replace(/^"|"$/g, ""); if (!f) return toast("Folder chuniye", 1);
+    try { const r = await api("/api/cull/start", { folder: f, stage: $("#cst").value }); C.folder = f; cullRemember(f); toast(`Shuru · ${r.jpgs} photos`); tick(true); } catch (e) { toast(e.message, 1); }
+  };
+  $("#cstop").onclick = async () => { await api("/api/cull/stop", {}); toast("Rok diya — dobara Start par wahin se chalega"); };
+  let timer;
+  async function tick(once) {
+    clearTimeout(timer);
+    if (S.route !== "photos") return;
+    if (C.folder) {
+      try {
+        const r = await api("/api/cull/status?folder=" + enc(C.folder)), s = r.status || {};
+        const pct = s.total ? 100 * (s.done || 0) / s.total : 0;
+        $("#cstage").textContent = r.running ? "Stage " + (s.stage || "…") : s.stage === "done" ? "Done" : s.stage === "error" ? "Error" : s.stage === "stopped" ? "Stopped" : "—";
+        $("#cdone").textContent = s.total ? `${s.done || 0}/${s.total}` : "—";
+        $("#ceta").textContent = r.running ? fmtETA(s.eta) : "—";
+        $("#cbar").style.width = (s.stage === "done" ? 100 : pct) + "%";
+        $("#chero").textContent = r.report ? r.report.hero : "—"; $("#cbest").textContent = r.report ? r.report.best : "—";
+        $("#cgo").style.display = r.running ? "none" : ""; $("#cstop").style.display = r.running ? "" : "none";
+        $("#cres").innerHTML = (r.report ? `<span class="small muted">${r.report.total} photos · ${Object.entries(r.report.counts).sort().reverse().map(([k, n]) => `${k}★ ${n}`).join(" · ")}</span><span class="sp"></span>
+            <button class="btn primary" data-open="${h(r.selects)}">${ICON.folder}Selects folder</button>` : `<span class="sp"></span>`) +
+          `<button class="btn" data-open="${h(r.out)}">${ICON.open}Cull folder</button>` +
+          (s.stage === "error" ? `<div class="note" style="flex-basis:100%">${h((s.err || "").split("\n").slice(-3).join(" "))}</div>` : "");
+        $$("[data-open]").forEach(b => b.onclick = () => api("/api/reveal", { path: b.dataset.open }));
+        const c = $("#clog"); c.textContent = (r.log || []).join("\n"); c.scrollTop = 1e9;
+        if (!once || r.running) timer = setTimeout(tick, r.running ? 1500 : 5000);
+      } catch { timer = setTimeout(tick, 4000); }
+    }
+  }
+  tick();
+};
