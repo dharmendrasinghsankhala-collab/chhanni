@@ -1,6 +1,7 @@
 """
-Music analysis for beat-synced cutting (numpy only).
-analyze(path) -> {"tempo", "beats": [sec...], "downbeats": [sec...], "energy": [0..1 per beat], "duration"}
+Music analysis for beat-synced cutting.
+analyze(path) -> {"tempo", "beats": [sec...], "downbeats": [sec...], "energy": [0..1 per beat], "duration", "engine"}
+Uses Beat This! (CPJKU, optional - Models page) when installed, else the built-in numpy tracker.
 """
 import subprocess
 
@@ -78,13 +79,67 @@ def track(env, lag, tightness=100):
     return np.array(beats[::-1])
 
 
+_AI = {"model": None, "failed": False}
+
+
+def _ai_model():
+    """Beat This! model (cached). None if not installed / failed once."""
+    if _AI["model"] is not None or _AI["failed"]:
+        return _AI["model"]
+    try:
+        import torch
+        from beat_this.inference import Audio2Beats
+        dev = "cuda" if torch.cuda.is_available() else "cpu"
+        _AI["model"] = Audio2Beats(checkpoint_path="final0", device=dev, dbn=False)
+    except Exception:
+        _AI["failed"] = True
+    return _AI["model"]
+
+
+def ai_beats(y, sr=SR):
+    """(beats, downbeats) in seconds from Beat This!, or None."""
+    m = _ai_model()
+    if m is None:
+        return None
+    try:
+        b, d = m(np.asarray(y, dtype=np.float32), sr)
+        b, d = np.asarray(b, dtype=float), np.asarray(d, dtype=float)
+        return (b, d) if len(b) >= 4 else None
+    except Exception:
+        return None
+
+
+def ai_selftest():
+    m = _ai_model()
+    if m is None:
+        raise RuntimeError("Beat This! load nahi hua (Models page se install karein)")
+    t = np.arange(SR * 8) / SR
+    y = np.zeros_like(t)
+    for k in range(16):                       # 120 BPM clicks
+        i = int(k * 0.5 * SR)
+        y[i:i + 400] += np.sin(2 * np.pi * 1000 * t[:400]) * np.hanning(400)
+    r = ai_beats(y)
+    n = 0 if r is None else len(r[0])
+    return f"Beat This! ready ({n} beats in 8 s test click)"
+
+
 def analyze(path, ffmpeg):
     y = load(path, ffmpeg)
     env, rms = onset_envelope(y)
-    bpm, lag = tempo(env)
-    bf = track(env, lag)
     fr = SR / HOP
-    times = bf / fr + (2048 - HOP) / SR     # frame index -> onset time (window latency)
+    engine = "builtin"
+    ai = ai_beats(y)
+    if ai is not None:
+        times, dts = ai
+        bf = np.clip(np.round((times - (2048 - HOP) / SR) * fr).astype(int), 0, max(0, len(rms) - 1))
+        d = np.diff(times)
+        bpm = 60.0 / float(np.median(d)) if len(d) else 0.0
+        lag = max(1, int(round(np.median(d) * fr))) if len(d) else 1
+        engine = "beat_this"
+    else:
+        bpm, lag = tempo(env)
+        bf = track(env, lag)
+        times = bf / fr + (2048 - HOP) / SR     # frame index -> onset time (window latency)
     # energy per beat (rms between beats), normalised
     e = []
     for i, f in enumerate(bf):
@@ -98,6 +153,10 @@ def analyze(path, ffmpeg):
     # downbeat phase: the beat phase (0..3) with the strongest onsets
     strength = (env[bf] / (env[bf].max() + 1e-9) + rms[bf] / (rms[bf].max() + 1e-9)) if len(bf) else np.zeros(0)
     phase = int(np.argmax([strength[p::4].mean() if len(strength[p::4]) else 0 for p in range(4)])) if len(bf) >= 8 else 0
+    if engine == "beat_this" and len(dts):      # snap downbeats onto the beat grid (assemble checks membership)
+        downs = np.unique(times[np.abs(times[None, :] - dts[:, None]).argmin(axis=1)])
+    else:
+        downs = times[phase::4]
     return {"tempo": round(float(bpm), 1), "beats": [round(float(t), 3) for t in times],
-            "downbeats": [round(float(t), 3) for t in times[phase::4]], "energy": [round(float(x), 3) for x in e],
-            "duration": round(len(y) / SR, 2)}
+            "downbeats": [round(float(t), 3) for t in downs], "energy": [round(float(x), 3) for x in e],
+            "duration": round(len(y) / SR, 2), "engine": engine}

@@ -24,3 +24,8 @@ Advisory only. The app never switches models automatically — see models_catalo
   if VRAM is tight.
 - Whisper large-v3 int8_float16 ≈ 5 GB VRAM; handles Hindi/English mix well.
 - Q-ReAlign-Pro-9B (June 2026) gives 0–1 quality/aesthetic scores for images+video but ~18 GB BF16 → needs quantising; skip for now.
+
+## 2026-11-12 (user request) — added to the app
+- Models page: **Beat This!** item (Audio). When installed, music-video beat cutting uses it; else the built-in tracker.
+- VLM dropdown: `nemotron-3.5-bolt:e4b` and `lfm3-vl:2b` (pick → Install). Only Qwen3-VL also becomes the AI Team LLM.
+  Photo cull (dance) stays on Qwen3-VL 8B.

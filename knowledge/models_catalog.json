@@ -43,6 +43,13 @@
           "why": "27B vision model in 8 GB.",
           "why_not": "Quality unverified; watch only."
         }
+      ],
+      "in_app_dropdown": [
+        "qwen3-vl:8b-instruct",
+        "qwen3-vl:4b-instruct",
+        "qwen3-vl:2b-instruct",
+        "nemotron-3.5-bolt:e4b",
+        "lfm3-vl:2b"
       ]
     },
     "shots": {
@@ -136,20 +143,13 @@
     },
     "beats": {
       "recommended": {
-        "name": "Built-in beat tracker (numpy onset + tempo, app/beats.py)",
-        "install": "built-in",
-        "vram_gb": 0,
-        "license": "project"
+        "name": "Beat This! (beat_this, optional - Models page)",
+        "install": "pip install beat_this (app installs torchaudio CUDA first)",
+        "vram_gb": 1,
+        "license": "MIT",
+        "fallback": "built-in numpy tracker (app/beats.py)"
       },
       "candidates": [
-        {
-          "name": "beat_this",
-          "install": "pip install git+https://github.com/CPJKU/beat_this",
-          "vram_gb": 1,
-          "license": "MIT",
-          "why": "Much better beats + downbeats for music-video cutting.",
-          "why_not": "Git install, needs torch."
-        },
         {
           "name": "All-In-One (allin1)",
           "install": "pip install allin1",

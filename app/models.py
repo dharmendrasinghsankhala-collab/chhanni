@@ -40,6 +40,8 @@ CATALOG = [
      "size": "~40 MB", "use": "Chehre, kaun sa insaan kis shot mein hai, facial emotion"},
     {"id": "motion", "group": "Vision", "name": "Camera motion (pan / tilt / zoom / dolly / handheld)",
      "what": "OpenCV optical flow", "size": "built-in", "use": "Camera kya kar raha hai, kitni speed se"},
+    {"id": "beats", "group": "Audio", "name": "Beat This! (AI beats + downbeats)", "what": "beat_this (CPJKU) via PyTorch",
+     "size": "~0.1 GB", "use": "Music video ke liye accurate beat / downbeat - cut sahi taal par. Na ho to built-in tracker chalta hai"},
     {"id": "vlm", "group": "Understanding", "name": "Qwen3-VL 8B (scene description, action, mood)",
      "what": "Ollama (local)", "size": "~6 GB", "use": "Shot mein kya ho raha hai shabdon mein, AI Team ka dimaag"},
 ]
@@ -90,6 +92,7 @@ def status():
         "faces": {"ok": (MODEL_DIR / "face_recognition_sface_2021dec.onnx").exists()
                   and (MODEL_DIR / "face_detection_yunet_2023mar.onnx").exists()},
         "motion": {"ok": True},
+        "beats": {"ok": torch_ok and _has("beat_this") and _has("torchaudio"), "partial": torch_ok},
         "vlm": {"ok": bool(tags) and any(t and t.split(":")[0] == vlm_model.split(":")[0] and
                                          (t == vlm_model or t.startswith(vlm_model)) for t in tags),
                 "ollama": tags is not None, "ollama_installed": bool(ollama_exe()) or tags is not None,
@@ -217,7 +220,7 @@ def _install_ollama():
 
 
 def _pull(model):
-    _ilog(f"{model} download ho raha hai (pehli baar ~6 GB) ...")
+    _ilog(f"{model} download ho raha hai (pehli baar kuch GB) ...")
     req = urllib.request.Request(OLLAMA + "/api/pull", data=json.dumps({"model": model, "stream": True}).encode(),
                                  headers={"Content-Type": "application/json"})
     last = -1
@@ -255,6 +258,17 @@ def install(item):
         _run([_python(), "-c", "from transformers import ClapModel, ClapProcessor;"
               "ClapModel.from_pretrained('laion/clap-htsat-unfused');ClapProcessor.from_pretrained('laion/clap-htsat-unfused');"
               "print('CLAP ready')"])
+    elif item == "beats":
+        _ensure_torch()
+        if not _has("torchaudio"):
+            _ilog("torchaudio (CUDA build) install ho raha hai ...")
+            _run([_python(), "-m", "pip", "install", "--disable-pip-version-check", "torchaudio",
+                  "--index-url", "https://download.pytorch.org/whl/cu126"])
+        # no --upgrade: keeps the CUDA torch build untouched
+        _run([_python(), "-m", "pip", "install", "--disable-pip-version-check",
+              "beat_this", "einops", "rotary-embedding-torch", "soxr"])
+        _ilog("Beat This! checkpoint download ho raha hai ...")
+        _run([_python(), "-c", "from beat_this.inference import Audio2Beats;Audio2Beats('final0','cpu');print('Beat This! ready')"])
     elif item == "faces":
         if not sface_path().exists() and not _download(SFACE_URLS, sface_path(), 20_000_000):
             raise RuntimeError("SFace model download nahi hua.")
@@ -267,7 +281,8 @@ def install(item):
             import llm
             s = llm.load_settings()
             upd = {"vlm_model": model, "vlm_mode": s.get("vlm_mode") or "auto"}
-            if s.get("llm_provider") in (None, "", "none") or (s.get("llm_provider") == "ollama" and
+            # only Qwen3-VL becomes the AI Team brain too; other VLMs are for shot descriptions only
+            if model.startswith("qwen3-vl") and s.get("llm_provider") in (None, "", "none") or (s.get("llm_provider") == "ollama" and
                                                                  s.get("llm_model") in (None, "", "qwen3:8b", "qwen3-vl:8b")):
                 upd.update(llm_provider="ollama", llm_model=model)
             llm.save_settings(upd)
@@ -321,6 +336,7 @@ TEST_CODE = {
     "faces": "import deep;m=deep.Models({});assert m.face_rec() is not None and m.face_det() is not None;print('YuNet + SFace ready')",
     "vlm": "import deep;print(deep.vlm_ping())",
     "whisper": "import ai_audio;print(ai_audio.whisper_available())",
+    "beats": "import beats;print(beats.ai_selftest())",
 }
 
 

@@ -1,6 +1,6 @@
 {
-  "version": "4.0.6",
-  "notes": "Naya knowledge/ folder: lighting, color, dance, wedding tips + models catalog; Resolve 21.1 free mein scripting band - dhyan rakhein.",
+  "version": "4.0.7",
+  "notes": "Models page par naye: Beat This! (AI beat/downbeat), aur VLM dropdown mein nemotron-3.5-bolt E4B + lfm3-vl 2B.",
   "requirements": [
     "numpy",
     "opencv-python"

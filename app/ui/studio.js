@@ -25,7 +25,7 @@ XP.models = async function pageModels() {
         <div class="row">${ok ? "" : `<button class="btn primary sm" data-inst="${c.id}" ${ins.running ? "disabled" : ""}>Install</button>`}
         ${["qc", "motion"].includes(c.id) ? "" : `<button class="btn sm" data-test="${c.id}" ${ok ? "" : "disabled"}>Test</button>`}<span class="small muted" id="tr_${c.id}"></span></div>
         ${c.id === "vlm" ? `<div class="grid g2" style="margin-top:10px"><div class="field"><label>Model (VRAM ke hisaab se)</label><select class="input" id="vlmm">
-            <option value="qwen3-vl:8b-instruct">qwen3-vl 8B — best (12 GB GPU)</option><option value="qwen3-vl:4b-instruct">qwen3-vl 4B — fast (8 GB GPU)</option><option value="qwen3-vl:2b-instruct">qwen3-vl 2B — light (6 GB GPU)</option></select></div>
+            <option value="qwen3-vl:8b-instruct">qwen3-vl 8B — best (12 GB GPU)</option><option value="qwen3-vl:4b-instruct">qwen3-vl 4B — fast (8 GB GPU)</option><option value="qwen3-vl:2b-instruct">qwen3-vl 2B — light (6 GB GPU)</option><option value="nemotron-3.5-bolt:e4b">nemotron-3.5-bolt E4B — naya, try karein (~8 GB)</option><option value="lfm3-vl:2b">lfm3-vl 2B — naya, bahut tez (~3 GB)</option></select></div>
           <div class="field"><label>Description kab banaye</label><select class="input" id="vlmode"><option value="auto">Auto — har clip ke best shots</option><option value="all">Har shot (slow, sabse detail)</option><option value="off">Off</option></select></div></div>
           <div class="small muted">Pulled: ${h((s.pulled || []).join(", ") || "—")} ${s.ollama ? "" : s.ollama_installed ? "· Ollama band hai (Install dabane se start ho jayega)" : ""}</div>` : ""}</div>`;
     }).join("")}</div>`).join("")}
