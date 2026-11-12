@@ -273,6 +273,8 @@ def stage3(rows):
         mem = sorted([n for n, r in rows.items() if r["burst"] == b and not r["burst_best"] and not r["blur"]],
                      key=lambda n: -rows[n]["tech"])
         cand += mem[:1]
+    DANCE = {"solo_full", "araimandi", "jump", "abhinaya", "mudra", "feet", "namaskaram", "pushpanjali", "portrait"}
+    cand = sorted(set(cand), key=lambda n: (rows[n]["cat"] not in DANCE, -rows[n]["tech"]))
     todo = [n for n in cand if n not in done]
     log(f"stage3: {len(cand)} candidates for Qwen3-VL ({len(todo)} new)")
     t0 = time.time()
@@ -280,12 +282,17 @@ def stage3(rows):
         r = rows[n]
         im = load_reduced(SRC / r["jpg"], r.get("orient", 1))
         h, w = im.shape[:2]
-        s = 1280 / max(h, w)
+        s = 896 / max(h, w)
         im = cv2.resize(im, (int(w * s), int(h * s)), interpolation=cv2.INTER_AREA)
-        try:
-            d = vlm(im)
-        except Exception as e:
-            log(f"vlm error {n}: {str(e)[:120]}")
+        d = None
+        for attempt in range(2):
+            try:
+                d = vlm(im)
+                break
+            except Exception as e:
+                log(f"vlm error {n} (try {attempt + 1}): {str(e)[:120]}")
+                time.sleep(3)
+        if d is None:
             continue
         d["name"] = n
         with open(cache, "a", encoding="utf-8") as f:
