@@ -74,17 +74,9 @@ def exif_info(p):
         return {"time": 0, "orient": 1, "err": str(e)[:80]}
 
 
-def load_reduced(p, orient):
-    im = cv2.imread(str(p), cv2.IMREAD_REDUCED_COLOR_4)
-    if im is None:
-        return None
-    if orient == 6:
-        im = cv2.rotate(im, cv2.ROTATE_90_CLOCKWISE)
-    elif orient == 8:
-        im = cv2.rotate(im, cv2.ROTATE_90_COUNTERCLOCKWISE)
-    elif orient == 3:
-        im = cv2.rotate(im, cv2.ROTATE_180)
-    return im
+def load_reduced(p, orient=None):
+    # NB: cv2.imread applies the EXIF orientation itself -> image comes back upright
+    return cv2.imread(str(p), cv2.IMREAD_REDUCED_COLOR_4)
 
 
 # ------------------------------------------------------------------ stage 1
@@ -103,11 +95,16 @@ def stage1(files):
     cache = OUT / "stage1.jsonl"
     done = set()
     if cache.exists():
+        keep = []
         for l in cache.read_text(encoding="utf-8").splitlines():
             try:
-                done.add(json.loads(l)["name"])
+                d = json.loads(l)
+                if d.get("orient", 1) in (6, 8) and not d.get("v2"):
+                    continue
+                done.add(d["name"]); keep.append(l)
             except Exception:
                 pass
+        cache.write_text("\n".join(keep) + ("\n" if keep else ""), encoding="utf-8")
     embs = dict(np.load(OUT / "emb.npz")) if (OUT / "emb.npz").exists() else {}
     todo = [f for f in files if f.stem not in done]
     log(f"stage1: {len(todo)} photos to analyse ({len(done)} cached)")
@@ -158,7 +155,7 @@ def stage1(files):
                        "luma": round(float(g[y0:y1, x0:x1].mean()) if x1 > x0 and y1 > y0 else 0, 1)})
         fl.sort(key=lambda d: -d["box"][3])
         hi = float((g > 250).mean()); lo = float((g < 5).mean())
-        row = {"name": p.stem, "jpg": p.name, "w": w * 4, "h": h * 4, **ex, "sharp_peak": round(sharp_peak, 2),
+        row = {"v2": 1, "name": p.stem, "jpg": p.name, "w": w * 4, "h": h * 4, **ex, "sharp_peak": round(sharp_peak, 2),
                "sharp_global": round(float(lap.var()), 1), "luma": round(float(g.mean()), 1), "clip_hi": round(hi, 4),
                "clip_lo": round(lo, 4), "faces": fl}
         rgb = cv2.cvtColor(cv2.resize(im, (int(w * 336 / max(w, h)), int(h * 336 / max(w, h)))), cv2.COLOR_BGR2RGB)
@@ -216,7 +213,7 @@ def stage2():
         if f and f["luma"]:
             expo -= max(0, (45 - f["luma"]) / 90) + max(0, (f["luma"] - 235) / 40)   # face too dark / blown
         r["tech"] = round(float(max(0.0, 0.55 * (fsharp if fsharp is not None else s) + 0.25 * s + 0.2 * max(0, expo))), 3)
-        r["blur"] = bool((fsharp is not None and fsharp < 0.25) or s < 0.2)
+        r["blur"] = bool((fsharp is not None and fsharp < 0.08 and s < 0.35) or s < 0.08)
     for bi, b in enumerate(bursts):
         best = max(b, key=lambda n: rows[n]["tech"] + 0.3 * rows[n]["aes"])
         for n in b:
@@ -328,9 +325,7 @@ def crop_for(r, d, ratio):
     x1, y1, x2, y2 = [v / 1000.0 for v in box]
     if x2 - x1 < 0.05 or y2 - y1 < 0.1:
         return None
-    W, H = r["w"], r["h"]
-    if r.get("orient") in (6, 8):
-        W, H = H, W
+    W, H = r["w"], r["h"]          # already upright dimensions
     bh = (y2 - y1)
     top, bot = y1 - 0.12 * bh, y2 + 0.07 * bh
     ch = min(1.0, bot - top)
@@ -425,7 +420,7 @@ def stage4(rows, V):
             kws.append("check/limbs-cut")
         crop, ang = None, 0.0
         if rating >= 4:
-            ratio = (r["w"] / r["h"]) if r.get("orient") not in (6, 8) else (r["h"] / r["w"])
+            ratio = r["w"] / r["h"]
             if r.get("orient", 1) == 1:      # crop coords only for un-rotated frames (safe in every raw editor)
                 im = load_reduced(SRC / r["jpg"], 1)
                 ang = straighten_angle(im) if im is not None else 0.0
@@ -468,9 +463,6 @@ def stage4(rows, V):
         im = cv2.imread(str(SRC / r["jpg"]), cv2.IMREAD_REDUCED_COLOR_2)
         if im is None:
             continue
-        o = r.get("orient", 1)
-        if o == 6: im = cv2.rotate(im, cv2.ROTATE_90_CLOCKWISE)
-        elif o == 8: im = cv2.rotate(im, cv2.ROTATE_90_COUNTERCLOCKWISE)
         h, w = im.shape[:2]
         a = r["xmp"]["angle"]
         if a:
