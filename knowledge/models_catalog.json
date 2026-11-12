@@ -1,0 +1,214 @@
+{
+  "updated": "2026-11-12",
+  "gpu_target": "RTX 3060 12 GB",
+  "note": "Suggestions only. The app does not switch models automatically; the user installs from the Models page.",
+  "tasks": {
+    "vlm": {
+      "recommended": {
+        "name": "Qwen3-VL 8B",
+        "install": "ollama pull qwen3-vl:8b",
+        "vram_gb": 6.2,
+        "license": "Apache-2.0"
+      },
+      "candidates": [
+        {
+          "name": "Nemotron 3.5 Bolt E4B",
+          "install": "ollama pull nemotron-3.5-bolt:e4b",
+          "vram_gb": 7.9,
+          "license": "OpenMDW-1.1",
+          "why": "New (Oct 2026), vision + thinking, Gemma 4 E4B base.",
+          "why_not": "Untested on our footage; Qwen3-VL proven."
+        },
+        {
+          "name": "LFM3-VL 2B",
+          "install": "ollama pull lfm3-vl:2b",
+          "vram_gb": 3,
+          "license": "see model card",
+          "why": "Very fast, small; good quick first-pass captions or when Whisper is also loaded.",
+          "why_not": "Less detailed than 8B models."
+        },
+        {
+          "name": "Gemma 4 12B",
+          "install": "ollama pull gemma4:12b",
+          "vram_gb": 7.7,
+          "license": "Gemma",
+          "why": "Strong general vision.",
+          "why_not": "Bigger, slower than Qwen3-VL 8B for similar tagging."
+        },
+        {
+          "name": "Bonsai 2 27B (ternary)",
+          "install": "ollama pull bonsai-2:27b",
+          "vram_gb": 8.3,
+          "license": "Apache-2.0",
+          "why": "27B vision model in 8 GB.",
+          "why_not": "Quality unverified; watch only."
+        }
+      ]
+    },
+    "shots": {
+      "recommended": {
+        "name": "TransNetV2",
+        "install": "pip install transnetv2-pytorch",
+        "vram_gb": 0.5,
+        "license": "MIT"
+      },
+      "candidates": [
+        {
+          "name": "PySceneDetect",
+          "install": "pip install scenedetect",
+          "vram_gb": 0,
+          "why": "CPU fallback.",
+          "why_not": "Less accurate on dissolves."
+        },
+        {
+          "name": "OmniShotCut",
+          "install": null,
+          "why": "Beats TransNetV2 in paper, classifies transitions.",
+          "why_not": "No code released yet."
+        }
+      ]
+    },
+    "faces": {
+      "recommended": {
+        "name": "YuNet + SFace (OpenCV)",
+        "install": "built-in (OpenCV DNN, ~40 MB)",
+        "vram_gb": 0,
+        "license": "Apache-2.0/MIT"
+      },
+      "candidates": [
+        {
+          "name": "InsightFace buffalo_l",
+          "install": "pip install insightface onnxruntime-gpu",
+          "vram_gb": 1,
+          "why": "More accurate identity matching in crowds (weddings).",
+          "why_not": "Bundled models are non-commercial licence."
+        }
+      ]
+    },
+    "speech": {
+      "recommended": {
+        "name": "Whisper large-v3 (faster-whisper)",
+        "install": "pip install faster-whisper",
+        "vram_gb": 5,
+        "license": "MIT"
+      },
+      "candidates": [
+        {
+          "name": "Nemotron 3.5 ASR streaming 0.6B",
+          "install": "pip install -U \"transformers>=5.13\"  (nvidia/nemotron-3.5-asr-streaming-0.6b)",
+          "vram_gb": 2,
+          "license": "OpenMDW-1.1",
+          "why": "Much faster, Hindi supported (NVIDIA-reported WER ~7-8%).",
+          "why_not": "Needs newer transformers; Whisper better tested on Hinglish/Rajasthani."
+        },
+        {
+          "name": "AI4Bharat IndicConformer 600M",
+          "install": "HF: ai4bharat/indic-conformer-600m-multilingual",
+          "vram_gb": 2,
+          "why": "Built for Indian languages.",
+          "why_not": "Weaker on English mixing."
+        },
+        {
+          "name": "Nemotron 3.5 Transcribe 30B-A4B",
+          "install": null,
+          "vram_gb": 17,
+          "why": "Hinglish code-switching + speaker labels.",
+          "why_not": "Does not fit 12 GB."
+        }
+      ]
+    },
+    "sound": {
+      "recommended": {
+        "name": "LAION CLAP",
+        "install": "pip install transformers librosa soundfile",
+        "vram_gb": 0.8,
+        "license": "Apache-2.0"
+      },
+      "candidates": [
+        {
+          "name": "PANNs",
+          "install": "pip install panns-inference",
+          "vram_gb": 0.5,
+          "why": "Fixed AudioSet labels, fast.",
+          "why_not": "No free-text queries."
+        }
+      ]
+    },
+    "beats": {
+      "recommended": {
+        "name": "Built-in beat tracker (numpy onset + tempo, app/beats.py)",
+        "install": "built-in",
+        "vram_gb": 0,
+        "license": "project"
+      },
+      "candidates": [
+        {
+          "name": "beat_this",
+          "install": "pip install git+https://github.com/CPJKU/beat_this",
+          "vram_gb": 1,
+          "license": "MIT",
+          "why": "Much better beats + downbeats for music-video cutting.",
+          "why_not": "Git install, needs torch."
+        },
+        {
+          "name": "All-In-One (allin1)",
+          "install": "pip install allin1",
+          "vram_gb": 2,
+          "why": "Song structure: intro/verse/chorus.",
+          "why_not": "Heavier dependencies (madmom, natten)."
+        }
+      ]
+    },
+    "aesthetic": {
+      "recommended": {
+        "name": "CLIP ViT-B/32 aesthetic (current)",
+        "install": "pip install open_clip_torch pillow",
+        "vram_gb": 0.6,
+        "license": "MIT"
+      },
+      "candidates": [
+        {
+          "name": "pyiqa (MUSIQ, CLIP-IQA, Q-Align, LAION aesthetic)",
+          "install": "pip install pyiqa",
+          "vram_gb": 2,
+          "why": "Proper technical + aesthetic quality metrics for photo culling.",
+          "why_not": "Q-Align inside needs ~8 GB."
+        },
+        {
+          "name": "Q-ReAlign-Pro-9B",
+          "install": "HF: q-future/Q-ReAlign-Pro-9B",
+          "vram_gb": 18,
+          "why": "Image + video quality/aesthetic 0-1 score.",
+          "why_not": "Too big unquantised for 12 GB."
+        }
+      ]
+    },
+    "segmentation": {
+      "recommended": {
+        "name": "SAM 3.1 (Meta)",
+        "install": "git clone https://github.com/facebookresearch/sam3 && pip install -e sam3",
+        "vram_gb": 6,
+        "license": "SAM licence"
+      },
+      "candidates": [
+        {
+          "name": "WeVisOne-VL-2B",
+          "install": "pip install -U transformers accelerate  (tencent/WeVisOne-VL-2b)",
+          "vram_gb": 6,
+          "license": "Apache-2.0",
+          "why": "New (Oct 2026): text-prompt segmentation + alpha matting for roto.",
+          "why_not": "New, decoder from separate repo; untested."
+        }
+      ]
+    },
+    "upscale": {
+      "recommended": {
+        "name": "Real-ESRGAN",
+        "install": "pip install realesrgan",
+        "vram_gb": 2,
+        "license": "BSD-3"
+      },
+      "candidates": []
+    }
+  }
+}
