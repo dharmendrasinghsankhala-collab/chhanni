@@ -505,7 +505,7 @@ def plan(style="classic"):
                 e = V["b"][pb]; vv = VOC["b"][pb]
                 ks = [str(k) for k in range(len(e["p"])) if t0 - 1 <= e["tl0"] / FPS + 2 * k <= t1 + 1]
                 sc = [vv[k][0] for k in ks if k in vv]
-                vocal = bool(sc) and float(np.mean(sc)) > 0.45
+                vocal = bool(sc) and float(np.mean(sc)) > 0.25
                 if vocal:
                     q_b.musician, b_ok = True, True
             if b_ok and q_b.musician:      # musician cut-away: short, and not too often (vocalist more often)
