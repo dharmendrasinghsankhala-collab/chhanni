@@ -25,9 +25,12 @@ NOWIN = 0x08000000 if sys.platform == "win32" else 0
 W, H = 160, 90
 
 
+HW = []
+
+
 def motion(path, src0, n, fps):
     """per-frame motion energy for n frames starting at source frame src0 (low-res frame differencing)."""
-    cmd = ["ffmpeg", "-v", "error", "-ss", f"{src0 / fps:.3f}", "-i", path, "-frames:v", str(n + 1), "-an",
+    cmd = ["ffmpeg", "-v", "error", *HW, "-ss", f"{src0 / fps:.3f}", "-i", path, "-frames:v", str(n + 1), "-an",
            "-vf", f"scale={W}:{H},format=gray", "-f", "rawvideo", "-"]
     raw = subprocess.run(cmd, capture_output=True, creationflags=NOWIN).stdout
     fr = np.frombuffer(raw[:len(raw) // (W * H) * W * H], np.uint8).reshape(-1, H, W).astype(np.float32)
@@ -53,6 +56,10 @@ def main(job_p, out_p):
     mn, mx = int(J.get("min", 2.0) * fps), int(J.get("max", 4.0) * fps)
     g0, g1 = [int(x * fps) for x in J.get("gap", [1.2, 2.6])]
     beats = np.array(sorted(J.get("beats", [])))
+    if J.get("hwaccel"):
+        HW[:] = ["-hwaccel", J["hwaccel"]]
+    use_a = J.get("use_a", True)          # wide 6K decode is slow; the close angle alone carries the action
+    done = 0
     res = []
     for s in J["shots"]:
         r0, r1 = int(s["rec0"]), int(s["rec1"])
@@ -62,12 +69,12 @@ def main(job_p, out_p):
             continue
         mb = norm(motion(s["b"]["path"], s["b"]["in"], n, fps))
         ma = np.zeros(n)
-        for a in s.get("a", []):
+        for a in (s.get("a", []) if use_a else []):
             lo, hi = max(r0, a["rec0"]), min(r1, a["rec1"])
             if hi > lo:
                 ma[lo - r0:hi - r0] = motion(a["path"], a["in"] + (lo - a["rec0"]), hi - lo, fps)
         ma = norm(ma)
-        act = np.sqrt(np.clip(mb, 0, 3) * np.clip(ma, 0, 3))     # moving in both angles = match-on-action
+        act = np.sqrt(np.clip(mb, 0, 3) * np.clip(ma, 0, 3)) if use_a else np.clip(mb, 0, 3)  # match-on-action
         act = np.convolve(act, np.ones(3) / 3, "same")
         beat_bonus = np.zeros(n)
         for b in beats:
@@ -90,6 +97,9 @@ def main(job_p, out_p):
                 break
             t = nxt
         res.append({"id": s["id"], "pieces": pieces})
+        done += 1
+        if J.get("progress"):
+            open(J["progress"], "w").write(f"{done}/{len(J['shots'])}")
     json.dump({"shots": res}, open(out_p, "w"))
 
 
