@@ -371,7 +371,16 @@ def _beats(flux, lo_bpm=55, hi_bpm=180):
     return np.array(out[::-1]), 6000.0 / period
 
 
-def plan():
+STYLES = {
+    # nritta, abhinaya, first shot (sec); wide breathing limits; musician cut-away max len / min gap
+    "classic": dict(nr=(4.5, 8.5), ab=(8.0, 15.0), first=(6.0, 10.0), lim=(14.0, 32.0), mus=(9.0, 45.0), voc=(9.0, 45.0)),
+    "fast": dict(nr=(2.6, 5.4), ab=(4.5, 8.5), first=(4.0, 7.0), lim=(9.0, 18.0), mus=(5.5, 40.0), voc=(7.0, 16.0)),
+}
+
+
+def plan(style="classic"):
+    ST = STYLES[style]
+    VOC = json.load(open(OUT / "vocal.json")) if (OUT / "vocal.json").exists() else None
     FA = dict(np.load(OUT / "afeat.npz"))
     S = np.load(OUT / "sound.npz"); P = S["P"]; L = list(S["labels"]); W = float(S["win"])
     sync = json.load(open(OUT / "sync.json"))
@@ -471,9 +480,9 @@ def plan():
         while t < tb - 0.5:
             w = int((t - ta) / W)
             nritta = float(nr[min(w, len(nr) - 1)]) >= float(ab[min(w, len(ab) - 1)])
-            lo, hi = (4.5, 8.5) if nritta else (8.0, 15.0)
+            lo, hi = ST["nr"] if nritta else ST["ab"]
             if k == 0:
-                lo, hi = 6.0, 10.0
+                lo, hi = ST["first"]
             cand = [(i, x) for i, x in enumerate(bt) if t + lo <= x <= t + hi]
             if t + hi >= tb - 3 or not cand:
                 t1 = tb if t + hi >= tb - 3 else t + (lo + hi) / 2
@@ -486,16 +495,28 @@ def plan():
                 t1 = max(cand, key=sc)[1]
             shots.append([round(t, 3), round(t1, 3), nritta]); t = t1; k += 1
         # camera choice: close (B) carries the dance, wide (A) opens / closes the item and breathes in regularly
-        out, since_a, last_mus = [], 0.0, -1e9
+        out, since_a, last_mus, last_voc = [], 0.0, -1e9, -1e9
         for j, (t0, t1, nritta) in enumerate(shots):
             q_b.musician = False
             pb, qb = q_b(t0, t1); qa = q_a(t0, t1)
             b_ok, a_ok = bool(pb) and qb > 0.25, qa > 0
-            if b_ok and q_b.musician:      # musician cut-away: short, and not too often
-                b_ok = (t1 - t0) <= 9.0 and t0 - last_mus >= 45.0
+            vocal = False
+            if VOC and pb and pb in VOC["b"]:
+                e = V["b"][pb]; vv = VOC["b"][pb]
+                ks = [str(k) for k in range(len(e["p"])) if t0 - 1 <= e["tl0"] / FPS + 2 * k <= t1 + 1]
+                sc = [vv[k][0] for k in ks if k in vv]
+                vocal = bool(sc) and float(np.mean(sc)) > 0.45
+                if vocal:
+                    q_b.musician, b_ok = True, True
+            if b_ok and q_b.musician:      # musician cut-away: short, and not too often (vocalist more often)
+                mlen, mgap = ST["voc"] if vocal else ST["mus"]
+                b_ok = (t1 - t0) <= mlen and t0 - (last_voc if vocal else last_mus) >= mgap
                 if b_ok:
-                    last_mus = t0
-            limit = 14.0 if nritta else 32.0
+                    if vocal:
+                        last_voc = t0
+                    else:
+                        last_mus = t0
+            limit = ST["lim"][0] if nritta else ST["lim"][1]
             if (j == 0 or j == len(shots) - 1) and a_ok:
                 cam = "A"
             elif not b_ok:
@@ -506,7 +527,7 @@ def plan():
                 cam = "B"
             since_a = 0.0 if cam == "A" else since_a + (t1 - t0)
             out.append({"t0": t0, "t1": t1, "cam": cam, "b": pb if cam == "B" else None,
-                        "kind": "nritta" if nritta else "abhinaya"})
+                        "kind": "nritta" if nritta else "abhinaya", "vocal": bool(cam == "B" and vocal)})
         # merge consecutive same-camera shots
         merged = []
         for s_ in out:
@@ -572,7 +593,7 @@ def plan():
     res = {"items": [{k: v for k, v in d.items() if k != "shots"} for d in shots_by_item],
            "talks": [{"t0": s_["t0"], "t1": s_["t1"]} for s_ in talk_items], "master": master, "perf": perf,
            "a_cam": CFG["a_cam"], "sync": sync}
-    json.dump(res, open(OUT / "plan.json", "w"), indent=1)
+    json.dump(res, open(OUT / ("plan.json" if style == "classic" else f"plan_{style}.json"), "w"), indent=1)
     nb = sum(1 for s_ in master if s_["cam"] == "B")
     log(f"plan: {len(dance_items)} dance items, {len(talk_items)} speech/felicitation blocks, "
         f"master {len(master)} shots ({nb} close), perf {len(perf)} shots")
@@ -585,7 +606,7 @@ if __name__ == "__main__":
             analyse()
             plan()
         elif sys.argv[1] == "plan":
-            plan()
+            plan(sys.argv[3] if len(sys.argv) > 3 else "classic")
     except Exception:
         import traceback
         log("ERROR", traceback.format_exc())
