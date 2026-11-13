@@ -88,68 +88,89 @@ def tc_sec(tc):
 # ------------------------------------------------------------------ analyse
 def analyse():
     t0 = time.time()
-    # pick the A-cam audio channel with the most signal
-    a0 = CFG["a_cam"][-1][0]
-    lv = []
-    for ch in range(4):
-        raw = subprocess.run(["ffmpeg", "-v", "error", "-ss", "1200", "-t", "120", "-i", a0, "-vn", "-af",
-                              f"pan=mono|c0=c{ch}", "-ar", "8000", "-f", "f32le", "-"], capture_output=True,
-                             creationflags=NOWIN).stdout
-        y = np.frombuffer(raw, np.float32)
-        lv.append(float(np.sqrt((y ** 2).mean())) if len(y) else 0)
-    ach = int(np.argmax(lv))
-    log("A-cam channel levels", [round(20 * math.log10(v + 1e-9), 1) for v in lv], "-> using ch", ach)
-    # continuous A-cam audio on the timeline clock
-    parts, total = [], 0
-    for path, start in CFG["a_cam"]:
-        y = audio(path, ach)
-        pad = int(round(start / FPS * SR)) - total
-        if pad > 0:
-            parts.append(np.zeros(pad, np.float32)); total += pad
-        parts.append(y); total += len(y)
-    A = np.concatenate(parts); del parts
-    log("A audio", round(len(A) / SR / 60, 1), "min")
-    status(stage="features")
-    FA = feats(A)
+    need_A = not ((OUT / "afeat.npz").exists() and (OUT / "sound.npz").exists())
+    A = None
+    if need_A:
+        # pick the A-cam audio channel with the most signal
+        a0 = CFG["a_cam"][-1][0]
+        lv = []
+        for ch in range(4):
+            raw = subprocess.run(["ffmpeg", "-v", "error", "-ss", "1200", "-t", "120", "-i", a0, "-vn", "-af",
+                                  f"pan=mono|c0=c{ch}", "-ar", "8000", "-f", "f32le", "-"], capture_output=True,
+                                 creationflags=NOWIN).stdout
+            y = np.frombuffer(raw, np.float32)
+            lv.append(float(np.sqrt((y ** 2).mean())) if len(y) else 0)
+        ach = int(np.argmax(lv))
+        log("A-cam channel levels", [round(20 * math.log10(v + 1e-9), 1) for v in lv], "-> using ch", ach)
+        # continuous A-cam audio on the timeline clock
+        parts, total = [], 0
+        for path, start in CFG["a_cam"]:
+            y = audio(path, ach)
+            pad = int(round(start / FPS * SR)) - total
+            if pad > 0:
+                parts.append(np.zeros(pad, np.float32)); total += pad
+            parts.append(y); total += len(y)
+        A = np.concatenate(parts); del parts
+        log("A audio", round(len(A) / SR / 60, 1), "min")
+    if (OUT / "afeat.npz").exists():
+        FA = dict(np.load(OUT / "afeat.npz"))
+        log("A features cached")
+    else:
+        status(stage="features")
+        FA = feats(A)
+        np.savez_compressed(OUT / "afeat.npz", **FA)
     ref = norm_flux(FA["flux"])
-    np.savez_compressed(OUT / "afeat.npz", **FA)
-    # ---- sync B-cam clips
+    # ---- sync B-cam clips (audio only; camera timecode is not trusted - Rec Run TC jumps)
     status(stage="sync")
-    sync = {}
-    clips = sorted(CFG["b_cam"], key=lambda p: tc_sec(CFG["b_tc"][p]))
-    feats_b = {}
+    clips = sorted(CFG["b_cam"], key=lambda p: Path(p).name)          # file number = recording order
+    bf_path = OUT / "bfeat.npz"
+    bfe = dict(np.load(bf_path)) if bf_path.exists() else {}
     for p in clips:
-        yb = audio(p)
-        if len(yb) < SR * 3:
-            continue
-        feats_b[p] = norm_flux(feats(yb)["flux"])
-    # long clips first, full search -> clock offset
-    longest = sorted(feats_b, key=lambda p: -len(feats_b[p]))[:4]
-    offs = []
-    for p in longest:
-        lag, z = xcorr_best(ref, feats_b[p])
-        if lag is not None:
-            offs.append((lag / 100.0 - tc_sec(CFG["b_tc"][p]), z, p))
-            log("full search", Path(p).name, "tl", round(lag / 100, 2), "z", round(z, 1))
-    good = [o for o in offs if o[1] > 8]
-    clock = float(np.median([o[0] for o in good])) if good else None
-    log("clock offset (tl - B timecode)", clock)
-    for p, q in feats_b.items():
-        if clock is not None:
-            pred = int((tc_sec(CFG["b_tc"][p]) + clock) * 100)
-            lag, z = xcorr_best(ref, q, pred - 3000, pred + 3000)
+        k = Path(p).stem
+        if k not in bfe:
+            yb = audio(p)
+            if len(yb) >= SR * 3:
+                bfe[k] = norm_flux(feats(yb)["flux"])
+    np.savez_compressed(bf_path, **bfe)
+    clips = [p for p in clips if Path(p).stem in bfe]
+    res = {}
+    for p in clips:                                   # 1) unconstrained
+        lag, z = xcorr_best(ref, bfe[Path(p).stem])
+        res[p] = [lag, z]
+    strong = [p for p in clips if res[p][1] >= 12]
+    # keep strong anchors that respect recording order (longest increasing chain)
+    chain = []
+    for p in strong:
+        if not chain or res[p][0] >= res[chain[-1]][0] + len(bfe[Path(chain[-1]).stem]) - 200:
+            chain.append(p)
+        elif len(bfe[Path(p).stem]) > len(bfe[Path(chain[-1]).stem]):
+            chain[-1] = p
+    anchors = {p: res[p][0] for p in chain}
+    sync = {}
+    for i, p in enumerate(clips):                     # 2) constrained by neighbours
+        q = bfe[Path(p).stem]
+        if p in anchors:
+            lag, z, how = anchors[p], res[p][1], "audio"
         else:
-            lag, z = xcorr_best(ref, q)
-        if lag is None:
-            continue
-        if z < 6 and clock is not None:      # weak audio -> trust the camera clock
-            lag, how = int((tc_sec(CFG["b_tc"][p]) + clock) * 100), "timecode"
-        else:
-            how = "audio"
+            prev = [c for c in clips[:i] if c in anchors or c in sync]
+            nxt = [c for c in clips[i + 1:] if c in anchors]
+            lo = 0
+            if prev:
+                c = prev[-1]; st = anchors.get(c, None)
+                st = st if st is not None else int(sync[c]["tl_frame"] / FPS * 100)
+                lo = st + len(bfe[Path(c).stem]) - 100
+            hi = (anchors[nxt[0]] - len(q) + 100) if nxt else len(ref) - len(q)
+            lag, z = xcorr_best(ref, q, lo, hi)
+            how = "audio" if z >= 6 else "weak"
+            if lag is None:
+                continue
         sync[p] = {"tl_frame": round(lag / 100 * FPS, 2), "z": round(z, 1), "how": how, "dur": len(q) / 100}
         log("sync", Path(p).name, round(lag / 100, 2), "s", how, "z", round(z, 1))
     json.dump(sync, open(OUT / "sync.json", "w"), indent=1)
     # ---- sound classes (CLAP) every 4 s
+    if (OUT / "sound.npz").exists():
+        log("sound classes cached")
+        return visual(sync)
     status(stage="sound classes")
     import torch
     from transformers import ClapModel, ClapProcessor
@@ -192,9 +213,14 @@ def analyse():
     np.savez_compressed(OUT / "sound.npz", P=P, labels=np.array([x[0] for x in LAB]), win=W)
     del m
     torch.cuda.empty_cache()
-    # ---- visual tags per camera (keyframes ~ every 2 s)
+    return visual(sync)
+
+
+def visual(sync):
+    t0 = time.time()
     status(stage="visual")
-    import open_clip
+    import torch, open_clip
+    dev = "cuda" if torch.cuda.is_available() else "cpu"
     from PIL import Image
     cm, _, pre = open_clip.create_model_and_transforms("ViT-B-32", pretrained="laion2b_s34b_b79k", device=dev)
     tok = open_clip.get_tokenizer("ViT-B-32")
@@ -212,44 +238,55 @@ def analyse():
         tv = (tv / tv.norm(dim=-1, keepdim=True)).cpu().numpy()
 
     def vis(path, step=2.0):
+        cache = OUT / f"vis_{Path(path).stem}.json"
+        if cache.exists():
+            return json.load(open(cache))
+        import cv2
         W2, H2 = 384, 216
         cmd = ["ffmpeg", "-v", "error", "-skip_frame", "nokey", "-hwaccel", "auto", "-i", str(path), "-an", "-vf",
                f"fps={1 / step},scale={W2}:{H2}", "-f", "rawvideo", "-pix_fmt", "rgb24", "-"]
         p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, creationflags=NOWIN)
-        import cv2
-        ims, mot, sh, prev = [], [], [], None
+        batch, probs, mot, sh, prev = [], [], [], [], None
+
+        def flush():
+            if batch:
+                with torch.no_grad():
+                    e = cm.encode_image(torch.stack(batch).to(dev)).float()
+                    e = (e / e.norm(dim=-1, keepdim=True)).cpu().numpy()
+                s_ = 100 * (e @ tv.T); s_ = np.exp(s_ - s_.max(1, keepdims=True))
+                probs.extend((s_ / s_.sum(1, keepdims=True)).round(3).tolist())
+                batch.clear()
         while True:
             b = p.stdout.read(W2 * H2 * 3)
             if len(b) < W2 * H2 * 3:
                 break
             im = np.frombuffer(b, np.uint8).reshape(H2, W2, 3)
             g = cv2.cvtColor(im, cv2.COLOR_RGB2GRAY).astype(np.float32)
-            sh.append(float(cv2.Laplacian(g, cv2.CV_32F).var()))
+            sh.append(round(float(cv2.Laplacian(g, cv2.CV_32F).var()), 1))
             if prev is not None:
                 (dx, dy), _ = cv2.phaseCorrelate(prev, g)
-                mot.append(float(math.hypot(dx, dy)))
+                mot.append(round(float(math.hypot(dx, dy)), 2))
             else:
                 mot.append(0.0)
             prev = g
-            ims.append(pre(Image.fromarray(im)))
+            batch.append(pre(Image.fromarray(im)))
+            if len(batch) >= 64:
+                flush()
+        flush()
         p.wait()
-        probs = []
-        with torch.no_grad():
-            for i in range(0, len(ims), 64):
-                e = cm.encode_image(torch.stack(ims[i:i + 64]).to(dev)).float()
-                e = (e / e.norm(dim=-1, keepdim=True)).cpu().numpy()
-                s = 100 * (e @ tv.T); s = np.exp(s - s.max(1, keepdims=True)); probs.append(s / s.sum(1, keepdims=True))
-        return {"t": (np.arange(len(ims)) * step).tolist(), "p": np.concatenate(probs).round(3).tolist() if probs else [],
-                "motion": np.round(mot, 2).tolist(), "sharp": np.round(sh, 1).tolist()}
+        r = {"t": [round(i * step, 1) for i in range(len(probs))], "p": probs, "motion": mot[:len(probs)],
+             "sharp": sh[:len(probs)]}
+        json.dump(r, open(cache, "w"))
+        return r
     V = {"labels": [x[0] for x in VL], "a": {}, "b": {}}
     for path, start in CFG["a_cam"]:
         V["a"][path] = dict(vis(path), tl0=start)
-        log("visual A", Path(path).name)
+        log("visual A", Path(path).name, len(V["a"][path]["p"]), "frames")
     for k, p in enumerate(sync):
         V["b"][p] = dict(vis(p), tl0=sync[p]["tl_frame"])
         status(stage="visual B", done=k, total=len(sync))
     json.dump(V, open(OUT / "visual.json", "w"))
-    log("analyse done in", round(time.time() - t0), "s")
+    log("visual done in", round(time.time() - t0), "s")
     status(stage="analysed")
 
 
