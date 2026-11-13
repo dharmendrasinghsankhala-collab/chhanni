@@ -436,7 +436,12 @@ def plan():
         dancer = pr[:, VL.index("dancer_full")] + pr[:, VL.index("dancer_close")]
         talk = pr[:, VL.index("speaker")] + pr[:, VL.index("felicitation")]
         bad = pr[:, VL.index("blur")] + pr[:, VL.index("blocked")] + pr[:, VL.index("stage_empty")]
-        return p, float(dancer.mean() + 0.6 * talk.mean() - 1.2 * bad.mean() - 0.08 * max(0, mo.max() - 8))
+        mus = pr[:, VL.index("musicians")] if "musicians" in VL else np.zeros(len(pr))
+        q_b.musician = bool(mus.mean() > 0.5 and dancer.mean() < 0.3)
+        # orchestra cut-aways (nattuvanar / mridangam / vocal) are part of the Bharatanatyam grammar
+        shake = float(np.percentile(mo, 75)) if len(mo) else 0.0
+        return p, float(dancer.mean() + 0.6 * talk.mean() + 0.45 * mus.mean() - 1.2 * bad.mean()
+                        - 0.06 * max(0.0, shake - 10))
 
     def q_a(t0, t1):
         hit = vis_at(A, (t0 + t1) / 2)
@@ -481,10 +486,15 @@ def plan():
                 t1 = max(cand, key=sc)[1]
             shots.append([round(t, 3), round(t1, 3), nritta]); t = t1; k += 1
         # camera choice: close (B) carries the dance, wide (A) opens / closes the item and breathes in regularly
-        out, since_a = [], 0.0
+        out, since_a, last_mus = [], 0.0, -1e9
         for j, (t0, t1, nritta) in enumerate(shots):
+            q_b.musician = False
             pb, qb = q_b(t0, t1); qa = q_a(t0, t1)
             b_ok, a_ok = bool(pb) and qb > 0.25, qa > 0
+            if b_ok and q_b.musician:      # musician cut-away: short, and not too often
+                b_ok = (t1 - t0) <= 9.0 and t0 - last_mus >= 45.0
+                if b_ok:
+                    last_mus = t0
             limit = 14.0 if nritta else 32.0
             if (j == 0 or j == len(shots) - 1) and a_ok:
                 cam = "A"
