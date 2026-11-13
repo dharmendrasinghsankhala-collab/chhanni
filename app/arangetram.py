@@ -166,6 +166,44 @@ def analyse():
                 continue
         sync[p] = {"tl_frame": round(lag / 100 * FPS, 2), "z": round(z, 1), "how": how, "dur": len(q) / 100}
         log("sync", Path(p).name, round(lag / 100, 2), "s", how, "z", round(z, 1))
+    # ---- repair: clips missing or overlapping their neighbours -> use the timecode offset of the nearest
+    # strong anchor whose timecode block agrees, refined by a local (+-5 s) audio search
+    def tcs(p):
+        return tc_sec(CFG["b_tc"][p]) if CFG.get("b_tc", {}).get(p) else None
+    strong_off = [(clips.index(p), sync[p]["tl_frame"] / FPS - tcs(p)) for p in clips
+                  if p in sync and sync[p]["z"] >= 20 and tcs(p) is not None]
+    def bad(i):
+        p = clips[i]
+        if p not in sync:
+            return True
+        st = sync[p]["tl_frame"] / FPS
+        for j in (i - 1, i + 1):
+            if 0 <= j < len(clips) and clips[j] in sync and clips[j] != p:
+                o = clips[j]; so = sync[o]["tl_frame"] / FPS
+                if j < i and st < so + sync[o]["dur"] - 1:
+                    return sync[p]["z"] < sync[o]["z"]
+                if j > i and st + sync[p]["dur"] > so + 1:
+                    return sync[p]["z"] < sync[o]["z"]
+        return False
+    for i, p in enumerate(clips):
+        if not bad(i) or tcs(p) is None or not strong_off:
+            continue
+        near = sorted(strong_off, key=lambda x: (abs(x[0] - i), -x[0]))[:2]
+        best = None
+        for _, off in near:
+            pred = int((tcs(p) + off) * 100)
+            q = bfe[Path(p).stem]
+            if pred + len(q) <= 0:
+                cand = (pred, 0.0)
+            else:
+                lag, z = xcorr_best(ref, q, pred - 500, pred + 500)
+                cand = (lag, z) if lag is not None and z >= 5 else (pred, 0.0)
+            if best is None or cand[1] > best[1]:
+                best = cand
+        lag, z = best
+        sync[p] = {"tl_frame": round(lag / 100 * FPS, 2), "z": round(z, 1),
+                   "how": "timecode+audio" if z >= 5 else "timecode", "dur": len(bfe[Path(p).stem]) / 100}
+        log("repair", Path(p).name, round(lag / 100, 2), "s", sync[p]["how"], "z", round(z, 1))
     json.dump(sync, open(OUT / "sync.json", "w"), indent=1)
     # ---- sound classes (CLAP) every 4 s
     if (OUT / "sound.npz").exists():
