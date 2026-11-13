@@ -391,6 +391,17 @@ def plan():
     speech_runs = _runs(is_speech | (clap > 0.4), int(15 / W), int(10 / W))
     # remove speech runs inside dance items
     speech_runs = [r for r in speech_runs if not any(a <= r[0] and r[1] <= b for a, b in dance_items)]
+    # Editor-verified programme (config "dance_ranges", timeline seconds) overrides audio detection.
+    # Music often runs through intervals / felicitations, so audio alone cannot tell dance from ceremony.
+    m_start = float(CFG.get("master_start", 0.0))
+    m_end = float(CFG.get("master_end", n * W))
+    if CFG.get("dance_ranges"):
+        dance_items = [(int(a / W), int(b / W)) for a, b in sorted(CFG["dance_ranges"])]
+        speech_runs, cur = [], int(m_start / W)
+        for a, b in dance_items + [(int(m_end / W), int(m_end / W))]:
+            if a - cur >= int(4 / W):
+                speech_runs.append((cur, a))
+            cur = max(cur, b)
     sec = lambda i: i * W
     # ---- camera helpers (seconds on the timeline)
     def vis_at(cam_entries, t):
@@ -524,6 +535,8 @@ def plan():
     master, cursor = [], None
     for kind, t0, t1, shots, item in blocks:
         pre, post = (6.0, 8.0) if kind == "dance" else (2.0, 3.0)
+        if CFG.get("dance_ranges"):
+            pre = post = 0.0
         a0, a1 = max(0, t0 - pre), t1 + post
         if cursor is not None and a0 < cursor:
             a0 = cursor
@@ -536,7 +549,8 @@ def plan():
         if blk and blk[0]["t0"] < a0:
             blk[0]["t0"] = a0
         master += blk
-        master.append({"t0": t1, "t1": a1, "cam": "A", "b": None, "kind": "tail"})
+        if a1 > t1:
+            master.append({"t0": t1, "t1": a1, "cam": "A", "b": None, "kind": "tail"})
         cursor = a1
     perf = []
     for d in shots_by_item:
