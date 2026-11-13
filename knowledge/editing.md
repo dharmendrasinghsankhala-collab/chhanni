@@ -33,3 +33,14 @@
   ([UXP changelog](https://developer.adobe.com/premiere-pro/uxp/changelog), [CineD](https://www.cined.com/adobe-premiere-27-0-released-color-mode-ai-assistant-panel-and-generative-audio-tools/))
 - Adobe local MCP integrations for Premiere/After Effects/Photoshop expected early 2027.
   ([No Film School](https://nofilmschool.com/adobe-local-mcp-integrations))
+
+## House style — learned from the editor (Nov 2026, Arangetram FAST v3)
+- Multicam stage/dance: wide (Cam1) runs continuously on V1, close camera (Cam2) sits on V2 with a colour label
+  (Orange), extra punch-ins on V3 (Pink). Audio from the master camera only.
+- B-roll / close-camera shots on V2: **2–4 s each** for fast cuts; nothing on V2 longer than ~4 s in a fast cut.
+- **Match on action** whenever two angles cover the same moment: cut in the middle of a clear movement
+  (arm sweep, turn, jump, stamp, head turn), not when the dancer is still. The movement starts in one angle and
+  finishes in the other. Pick the cut frame where motion is peaking in both angles, then snap to the nearest beat
+  (±4 frames) — action first, beat second.
+- Avoid cutting during a hold/pose unless it lands exactly on a strong beat (araimandi / mandi hold on sam).
+- The editor's own manual cuts and adjustments are the reference: re-cut only what they asked for, keep the rest.
