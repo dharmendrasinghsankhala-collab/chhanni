@@ -1,6 +1,6 @@
 {
-  "version": "4.1.1",
-  "notes": "Naya Photo cull page; delete kiya project ab sidebar/Review mein nahi dikhega; update ke baad notification hat jayega.",
+  "version": "4.1.2",
+  "notes": "Deep analysis: VLM ka ek galat jawab ab baaki clip ka describing nahi rokta; JSON parsing fix. Update ke baad analysis wahin se aage chalega.",
   "requirements": [
     "numpy",
     "opencv-python"

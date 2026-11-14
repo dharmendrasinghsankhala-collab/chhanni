@@ -111,6 +111,15 @@ def parse_json(text):
     try:
         return json.loads(text)
     except Exception:
+        # models sometimes emit two JSON objects or trailing text ("Extra data"): take the first complete object
+        dec = json.JSONDecoder()
+        for ch in "{[":
+            i = text.find(ch)
+            while i >= 0:
+                try:
+                    return dec.raw_decode(text[i:])[0]
+                except Exception:
+                    i = text.find(ch, i + 1)
         a, b = text.find("{"), text.rfind("}")
         if a >= 0 and b > a:
             return json.loads(text[a:b + 1])

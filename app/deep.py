@@ -19,6 +19,7 @@ import os
 import subprocess
 import time
 import urllib.request
+import urllib.error
 from pathlib import Path
 
 import numpy as np
@@ -654,9 +655,12 @@ def analyze_clip(clip, out_dir, M, progress=None):
                 break
             try:
                 segs[i]["vlm"] = vlm_describe(vlm, kf_imgs[i])
+            except (urllib.error.URLError, TimeoutError, ConnectionError, OSError) as e:
+                log(f"[deep] VLM offline: {str(e)[:120]}")
+                break                      # Ollama down: stop describing this clip
             except Exception as e:
                 log(f"[deep] VLM error: {str(e)[:120]}")
-                break
+                continue                   # one bad answer: skip that segment, keep going
             if progress and n_ % 3 == 0:
                 progress({"sub": f"describing {n_ + 1}/{len(order)}"})
     res = {"v": DEEP_VERSION, "clip_id": clip["id"], "name": clip.get("name"), "path": clip["path"], "src": str(src),
