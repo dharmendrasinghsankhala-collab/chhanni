@@ -629,7 +629,8 @@ class Handler(BaseHTTPRequestHandler):
             if u.path == "/api/browse_file":
                 return self._send(200, {"path": pick_file(b.get("title") or "File chuniye", b.get("kind", "audio"))})
             if u.path == "/api/ai/settings":
-                st = {k: b.get(k) for k in ("llm_provider", "llm_model", "base_url", "whisper_model", "language", "use_clip")}
+                st = {k: b.get(k) for k in ("llm_provider", "llm_model", "base_url", "whisper_model", "language", "use_clip",
+                                             "vlm_mode", "vlm_model", "deep_audio", "deep_faces")}
                 if b.get("api_key"):
                     st["api_key"] = b["api_key"]
                 llm.save_settings(st)

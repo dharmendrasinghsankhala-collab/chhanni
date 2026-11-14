@@ -73,7 +73,7 @@ XP.deep = async function pageDeep() {
     ${ds.done ? `<div class="row" style="margin-top:16px"><button class="btn primary" onclick="go('library')">Library mein search karo →</button><button class="btn" onclick="go('people')">People →</button><button class="btn" onclick="go('crew')">AI Team →</button></div>` : ""}</div>`;
   $("#dvlm").value = set.vlm_mode || "auto"; $("#dsnd").value = set.deep_audio === false ? "0" : "1"; $("#dfac").value = set.deep_faces === false ? "0" : "1";
   const saveOpts = () => api("/api/ai/settings", { vlm_mode: $("#dvlm").value, deep_audio: $("#dsnd").value === "1", deep_faces: $("#dfac").value === "1" });
-  ["dvlm", "dsnd", "dfac"].forEach(i => $("#" + i).onchange = saveOpts);
+  ["dvlm", "dsnd", "dfac"].forEach(i => $("#" + i).onchange = () => saveOpts().then(() => toast(S.job?.running ? "Saved — Stop karke dobara start karne par lagega" : "Saved")));
   const start = async retry => { await saveOpts(); try { await api("/api/deep/start", { out: S.out, retry_failed: !!retry }); toast("Deep analysis shuru"); setTimeout(XP.deep, 600); } catch (e) { toast(e.message, 1); } };
   $("#dgo") && ($("#dgo").onclick = () => start(false));
   $("#dretry") && ($("#dretry").onclick = () => start(true));
